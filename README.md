@@ -36,6 +36,7 @@ The script only ever creates or removes symlinks that point into this repo's `sk
 
 ```bash
 scripts/tests/test_activate.sh
+scripts/tests/test_skills.sh
 scripts/tests/test_prepare_run.sh
 scripts/tests/test_finalize_run.sh
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'

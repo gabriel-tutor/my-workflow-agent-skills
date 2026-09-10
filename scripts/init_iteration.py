@@ -24,7 +24,7 @@ SHORT = {"new_skill": "combo", "old_skill": "mp", "without_skill": "none"}
 PROMPT = """Execute this task in a benchmark sandbox.
 
 Working directory: {workspace}
-It is a git repository at a baseline commit. cd there first and do all work inside it.
+It is a git repository at a baseline commit. Your shell's working directory does not persist between Bash calls: prefix every command with `cd {workspace} &&` or use absolute paths, and never run git/npm commands anywhere else.
 
 {skill_line}
 
@@ -70,13 +70,17 @@ def main() -> int:
         task = (REPO / "benchmark" / "scenarios" / scenario / "prompt.md").read_text().strip()
         eval_dir = iteration / f"eval-{ev['id']}-{scenario}"
         eval_dir.mkdir(exist_ok=True)
-        (eval_dir / "eval_metadata.json").write_text(json.dumps(
-            {"eval_id": ev["id"], "eval_name": scenario, "prompt": task, "assertions": ev["expectations"]}, indent=1))
+        metadata = json.dumps(
+            {"eval_id": ev["id"], "eval_name": scenario, "prompt": task, "assertions": ev["expectations"]}, indent=1)
+        (eval_dir / "eval_metadata.json").write_text(metadata)
         for config in configs:
             for n in range(1, args.runs + 1):
                 run_dir = eval_dir / config / f"run-{n}"
                 subprocess.run([str(REPO / "scripts" / "prepare_run.sh"), scenario, str(run_dir)],
                                check=True, capture_output=True, text=True)
+                # skill-creator's eval-viewer looks for eval_metadata.json in run_dir and run_dir.parent
+                # only, so each run dir gets the same copy as the eval dir two levels up.
+                (run_dir / "eval_metadata.json").write_text(metadata)
                 skill = SKILL_FOR_CONFIG[config]
                 workspace = run_dir / "workspace"
                 report = run_dir / "outputs" / "REPORT.md"

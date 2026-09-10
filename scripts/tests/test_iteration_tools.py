@@ -21,11 +21,19 @@ class InitIterationTest(unittest.TestCase):
         self.assertEqual(meta["eval_name"], "cosmetic-edit")
         self.assertIn("recieve", meta["prompt"])
         self.assertGreaterEqual(len(meta["assertions"]), 5)
+        # The viewer (generate_review.py) looks for eval_metadata.json in run_dir and run_dir.parent
+        # only, so every run dir carries a copy identical to the eval-dir one.
+        for config in ("new_skill", "without_skill"):
+            run_meta = it / "eval-2-cosmetic-edit" / config / "run-1" / "eval_metadata.json"
+            self.assertTrue(run_meta.exists(), run_meta)
+            self.assertEqual(json.loads(run_meta.read_text()), meta)
         combo = runs[0]
         self.assertEqual(combo["agent_name"], "e2-combo")
         self.assertTrue(combo["skill_path"].endswith("skills/matt-pocock-superpowers-workflow/SKILL.md"))
         self.assertTrue((Path(combo["workspace"]) / "src" / "format.ts").exists())
         self.assertIn(combo["workspace"], combo["prompt_for_agent"])
+        self.assertIn(f"prefix every command with `cd {combo['workspace']} &&` or use absolute paths", combo["prompt_for_agent"])
+        self.assertNotIn("cd there first", combo["prompt_for_agent"])
         self.assertIn(combo["skill_path"], combo["prompt_for_agent"])
         self.assertIn("outputs/REPORT.md", combo["prompt_for_agent"])
         none = runs[1]

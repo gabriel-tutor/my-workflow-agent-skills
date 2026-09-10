@@ -66,8 +66,12 @@ def _result_text(block: dict) -> str:
 def convert(jsonl_path: Path, run_dir: Path) -> None:
     events: list[dict] = []
     tool_calls: Counter = Counter()
-    usage: Counter = Counter()
-    steps = 0
+    # Claude Code writes one record per content block of an assistant message; each repeats the
+    # message's `id` and `usage`. A step is one distinct message id and its usage counts once (the last
+    # record's, which carries the final output_tokens). Records without an id count individually.
+    usage_by_message: dict[str, dict] = {}
+    usage_without_id: Counter = Counter()
+    steps_without_id = 0
     errors = 0
     malformed = 0
     lines_md: list[str] = ["# Transcript", ""]
@@ -80,6 +84,9 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
         try:
             record = json.loads(raw)
         except json.JSONDecodeError:
+            malformed += 1
+            continue
+        if not isinstance(record, dict):
             malformed += 1
             continue
         rtype = record.get("type")
@@ -103,10 +110,16 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
                 lines_md += [f"> **{name} result{' (error)' if is_error else ''}:** {text}", ""]
 
         elif rtype == "assistant":
-            steps += 1
-            for key, value in ((record.get("message") or {}).get("usage") or {}).items():
-                if isinstance(value, int):
-                    usage[key] += value
+            message = record.get("message") if isinstance(record.get("message"), dict) else {}
+            message_usage = message.get("usage") if isinstance(message.get("usage"), dict) else {}
+            message_id = message.get("id")
+            if message_id:
+                usage_by_message[message_id] = message_usage
+            else:
+                steps_without_id += 1
+                for key, value in message_usage.items():
+                    if isinstance(value, int):
+                        usage_without_id[key] += value
             for block in _blocks(record):
                 btype = block.get("type")
                 if btype == "text" and block.get("text", "").strip():
@@ -136,6 +149,12 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
                     events.append(event)
                     lines_md += [f"- [{event['i']}] **{name}** {summary}", ""]
 
+    usage: Counter = Counter(usage_without_id)
+    for message_usage in usage_by_message.values():
+        for key, value in message_usage.items():
+            if isinstance(value, int):
+                usage[key] += value
+
     transcript = "\n".join(lines_md)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "transcript.md").write_text(transcript)
@@ -143,7 +162,7 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
     metrics = {
         "tool_calls": dict(tool_calls),
         "total_tool_calls": sum(tool_calls.values()),
-        "total_steps": steps,
+        "total_steps": len(usage_by_message) + steps_without_id,
         "errors_encountered": errors,
         "malformed_lines": malformed,
         "transcript_chars": len(transcript),
