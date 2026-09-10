@@ -34,16 +34,52 @@ On the other four scenarios — a cosmetic edit, a review-scope task, an approve
 
 Full write-up with per-run detail: [`benchmark/runs/iteration-1/analysis.md`](benchmark/runs/iteration-1/analysis.md). Raw transcripts, per-expectation grades and diffs for all 18 runs are committed under `benchmark/runs/iteration-1/`.
 
-## Activate one skill
+## How to use it
 
-Only one of the two should be installed at a time — both trigger "before the first edit of any development task" and would compete.
+### 1. Install the collections these skills route to
+
+Neither skill contains any workflow of its own — each one *names* skills that must already be installed, and does nothing useful without them.
 
 ```bash
-scripts/activate.sh status
-scripts/activate.sh matt-pocock-superpowers-workflow   # or matt-pocock-workflow, or none
+# Superpowers (Claude Code plugin) — needed by matt-pocock-superpowers-workflow
+/plugin marketplace add obra/superpowers-marketplace
+/plugin install superpowers@superpowers-marketplace
+
+# Matt Pocock's skills — needed by both, from github.com/mattpocock/skills
+# install into ~/.claude/skills/ by whatever method you prefer
 ```
 
-The script only ever creates or removes symlinks that point into this repo's `skills/`; it refuses to touch a real directory or a foreign symlink.
+Superpowers is installed from inside Claude Code (the `/plugin` commands above). Matt Pocock's skills are plain skill folders under `~/.claude/skills/<name>/SKILL.md`; this repo was developed against all 37 of them, but the routers degrade gracefully — a skill that isn't installed simply never gets routed to.
+
+### 2. Clone and activate
+
+```bash
+git clone https://github.com/gabriel-tutor/my-workflow-agent-skills.git
+cd my-workflow-agent-skills
+scripts/activate.sh matt-pocock-superpowers-workflow
+```
+
+That symlinks the chosen skill into `~/.claude/skills/`. Use `matt-pocock-workflow` instead if you don't run Superpowers, or `none` to uninstall both.
+
+**Only one at a time.** Both trigger "before the first edit of any development task", so having both installed produces two competing routers. `activate.sh` enforces this: it unlinks the other one when you activate either. It only ever creates or removes symlinks pointing into this repo's `skills/` — it refuses to touch a real directory or a foreign symlink, so it can't eat an existing installation.
+
+```bash
+scripts/activate.sh status    # which one is live right now
+```
+
+### 3. Then just work
+
+You don't invoke the skill. Its description triggers it automatically at the start of a development task, and it routes from there — so a normal request is all you do:
+
+> *"The scraper crashes during bulk runs, can you fix it?"*
+
+Behind that, the combined policy assigns one owner per stage: `superpowers:systematic-debugging` leads the diagnosis and escalates to Matt Pocock's `diagnosing-bugs` if reproduction turns out to be hard, `superpowers:test-driven-development` owns the test cycle with MP's seam guidance as reference, and review runs once — against the working tree, not just committed changes. The point is that no interview, test cycle or review runs twice, which is what happens when both collections are installed and nothing arbitrates between them.
+
+To confirm it's live, start a fresh session and ask which skill applies before a bug fix; it should name the active router.
+
+### When it's worth using
+
+Per the benchmark above: clearly worth it for **bugs and anything where process order matters** — that's where it beat both alternatives, and beat Matt Pocock's skills alone on cost too. For cosmetic edits, routine features and reviews, a strong model reached the same outcome without any router at roughly a quarter of the cost. If you want to be selective, run `scripts/activate.sh none` and invoke the skill by name when a task warrants it.
 
 ## Reproducing the benchmark
 
