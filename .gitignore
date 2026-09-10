@@ -1,0 +1,10 @@
+# OS / editor
+.DS_Store
+__pycache__/
+*.pyc
+
+# Node (fixture copies and the fixture itself install locally)
+node_modules/
+
+# Benchmark run workspaces (fixture copies are large & reproducible from fixture/ + scenarios/)
+benchmark/runs/**/workspace/
