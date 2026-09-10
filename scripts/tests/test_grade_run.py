@@ -133,6 +133,17 @@ class AcceptanceTest(unittest.TestCase):
         self.assertTrue(c["no_design_interview_skill"])
         self.assertTrue(c["single_execution_mode"])
 
+    def test_scenario_one_filter_runs_only_ac1_to_ac4(self):
+        run_dir = prepare("small-behavior-change")
+        ws = run_dir / "workspace"
+        pricing = ws / "src" / "pricing.ts"
+        pricing.write_text(pricing.read_text() + GOOD_COUPON)
+        write_events(run_dir, [])
+        obj = grade(run_dir, "small-behavior-change")
+        self.assertEqual(sorted(k[:3] for k in obj["hidden_tests"]), ["AC1", "AC2", "AC3", "AC4"])
+        self.assertEqual(set(obj["hidden_tests"].values()), {"passed"})
+        self.assertTrue(checks(obj)["hidden_acceptance_all_pass"])
+
     def test_partial_implementation_fails_threshold_and_case_checks(self):
         run_dir = prepare("review-scope")  # ships the partial applyCoupon
         write_events(run_dir, [])

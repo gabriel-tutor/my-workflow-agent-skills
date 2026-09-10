@@ -90,7 +90,12 @@ def read(ws: Path, rel: str) -> str:
 
 
 def run_hidden_tests(ws: Path, test_src: Path, name_pattern: str | None = None) -> dict[str, str]:
-    """Run a hidden vitest file against a temp copy of the workspace. Returns {test name: status}."""
+    """Run a hidden vitest file against a temp copy of the workspace. Returns {test name: status}.
+
+    Only tests that actually executed are recorded: a `-t` name filter reports the tests it excludes
+    as "skipped" rather than omitting them, so "skipped"/"pending"/"todo"/etc. are dropped here to keep
+    those out of the result (and out of the all-passed checks that key off it).
+    """
     tmp = Path(tempfile.mkdtemp())
     copy = tmp / "ws"
     shutil.copytree(ws, copy, symlinks=True, ignore=shutil.ignore_patterns(".git"))
@@ -105,7 +110,9 @@ def run_hidden_tests(ws: Path, test_src: Path, name_pattern: str | None = None) 
         data = json.loads(report.read_text())
         for file_result in data.get("testResults", []):
             for a in file_result.get("assertionResults", []):
-                results[a.get("fullName") or a.get("title")] = a.get("status", "failed")
+                status = a.get("status", "failed")
+                if status in ("passed", "failed"):
+                    results[a.get("fullName") or a.get("title")] = status
     shutil.rmtree(tmp, ignore_errors=True)
     return results
 
