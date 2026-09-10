@@ -27,8 +27,9 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [[ -L "$COMBO" ]] || fail "combo link missing"
 
 # 3. status reports the active one
-"$A" status | grep -q "matt-pocock-superpowers-workflow -> " || fail "status should show combo link"
-"$A" status | grep -q "matt-pocock-workflow : not installed" || fail "status should show mp not installed"
+STATUS_OUT="$("$A" status)"
+grep -q "matt-pocock-superpowers-workflow -> " <<<"$STATUS_OUT" || fail "status should show combo link"
+grep -q "matt-pocock-workflow : not installed" <<<"$STATUS_OUT" || fail "status should show mp not installed"
 
 # 4. none -> nothing left
 "$A" none >/dev/null
