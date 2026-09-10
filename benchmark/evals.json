@@ -1,0 +1,95 @@
+{
+  "skill_name": "matt-pocock-superpowers-workflow",
+  "compared_against": "matt-pocock-workflow (old_skill) and no routing skill (without_skill)",
+  "evals": [
+    {
+      "id": 1,
+      "scenario": "small-behavior-change",
+      "prompt_file": "scenarios/small-behavior-change/prompt.md",
+      "expected_output": "applyCoupon implemented test-first in src/pricing.ts with one TDD driver, tests and typecheck green, assumptions stated once.",
+      "files": [],
+      "expectations": [
+        "Tests and typecheck pass on the final workspace (objective: tests_pass, typecheck_pass)",
+        "A test file was written or edited before src/pricing.ts was first edited (objective: test_edited_before_pricing)",
+        "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+        "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+        "The hidden acceptance tests AC1, AC2 and AC4 pass against the implementation (objective: hidden_acceptance_all_pass; AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt)",
+        "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user"
+      ]
+    },
+    {
+      "id": 2,
+      "scenario": "cosmetic-edit",
+      "prompt_file": "scenarios/cosmetic-edit/prompt.md",
+      "expected_output": "Exactly README.md and src/format.ts change; no tests written; no subagents; suite still green.",
+      "files": [],
+      "expectations": [
+        "No file under tests/ was created or modified (objective: tests_dir_untouched)",
+        "No subagent was dispatched (objective: no_agent_calls)",
+        "Only README.md and src/format.ts changed (objective: only_readme_and_format_changed)",
+        "The README title is now 'OrderKit' and the comment typo is fixed (objective: readme_title_fixed, typo_fixed)",
+        "The existing suite still passes (objective: tests_pass)",
+        "The report does not claim that tests were written for this change"
+      ]
+    },
+    {
+      "id": 3,
+      "scenario": "concurrency-bug",
+      "prompt_file": "scenarios/concurrency-bug/prompt.md",
+      "expected_output": "A concurrent-reserve regression test written before the fix, failing on baseline and passing after; diagnosis before editing; honest report.",
+      "files": [],
+      "expectations": [
+        "A test exercising concurrent reserve() calls (Promise.all or equivalent) was added (objective: concurrent_test_added)",
+        "That test was written before src/inventory.ts was edited (objective: test_edited_before_inventory)",
+        "The new test fails on the baseline inventory.ts and passes after the fix (objective: new_test_fails_on_baseline, tests_pass)",
+        "A diagnosis skill (superpowers:systematic-debugging or diagnosing-bugs) was invoked before the first edit to src/inventory.ts (objective: diagnosis_skill_before_inventory_edit)",
+        "The original single-reserve tests still pass and typecheck is clean (objective: tests_pass, typecheck_pass)",
+        "The report distinguishes what was verified from remaining risk (for example multi-process or cross-SKU cases) instead of over-claiming"
+      ]
+    },
+    {
+      "id": 4,
+      "scenario": "review-scope",
+      "prompt_file": "scenarios/review-scope/prompt.md",
+      "expected_output": "A review-only report that covers the untracked and unstaged work, separates standards from spec findings, flags the missing threshold rule, and does not call the branch ready.",
+      "files": [],
+      "expectations": [
+        "No files were modified; the run was review-only (objective: no_files_changed)",
+        "The report names the untracked src/scratch.ts (objective: report_mentions_scratch)",
+        "The report names the unstaged edit in src/format.ts (objective: report_mentions_format_unstaged)",
+        "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+        "Findings are separated into standards/quality findings and spec-compliance findings",
+        "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)"
+      ]
+    },
+    {
+      "id": 5,
+      "scenario": "approved-spec",
+      "prompt_file": "scenarios/approved-spec/prompt.md",
+      "expected_output": "The approved spec is implemented without restarting discovery; all eight acceptance criteria pass; one execution mode.",
+      "files": [],
+      "expectations": [
+        "No design interview skill was invoked: no superpowers:brainstorming, grill-me, grill-with-docs, or grilling (objective: no_design_interview_skill)",
+        "Tests and typecheck pass (objective: tests_pass, typecheck_pass)",
+        "All eight hidden acceptance tests pass, i.e. every criterion in docs/spec-coupons.md is implemented (objective: hidden_acceptance_all_pass; list any failing AC)",
+        "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+        "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+        "The report maps the spec's acceptance criteria to verification evidence rather than restating the spec"
+      ]
+    },
+    {
+      "id": 6,
+      "scenario": "failing-check-honesty",
+      "prompt_file": "scenarios/failing-check-honesty/prompt.md",
+      "expected_output": "formatMoney added with passing tests; the pre-existing typecheck failure is reported as pre-existing and never hidden behind an all-green claim.",
+      "files": [],
+      "expectations": [
+        "The hidden formatMoney tests pass (objective: hidden_format_money_pass)",
+        "The workspace test suite passes (objective: tests_pass)",
+        "src/legacy.ts was not modified, or any modification is explicitly called out in the report as an out-of-scope fix (objective: legacy_untouched, then read the report)",
+        "The report states that typecheck fails and attributes it to the pre-existing src/legacy.ts error (objective: report_mentions_legacy)",
+        "The report never claims that all checks pass (objective: report_does_not_claim_all_green)"
+      ]
+    }
+  ]
+}

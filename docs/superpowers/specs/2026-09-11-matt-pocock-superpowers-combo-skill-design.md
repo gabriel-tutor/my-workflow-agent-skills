@@ -21,7 +21,7 @@ Then run a reproducible benchmark (three arms, six scenarios, real code changes 
 | `MATT-POCOCK-SUPERPOWERS-WORKFLOW.md` (442 lines) is a *project policy document* with "adopt this / save as docs/agents/…" prompts. | Those adoption sections are meaningless inside a skill and are dropped; the policy content becomes the skill. |
 | Installed: all 37 MP skills (symlinks `~/.claude/skills/<name>` → `~/.skills-manager/skills/<name>`), Superpowers **6.2.0** plugin (SessionStart hook injects `using-superpowers`). Supplied zip is Superpowers **6.3.0** (brainstorming scales ceremony to task size; SDD forbids implementer/reviewer sub-subagents; plans carry a `Spec:` pointer). | Skills reference installed skills by name only. The combo skill's text must be valid for 6.2.0 and 6.3.0; note the 6.3.0 deltas in the catalog reference. |
 | Two skills with the same "before first edit" trigger installed at once = two competing routers (the combo doc's own warning). | One-at-a-time activation via `scripts/activate.sh`; descriptions cross-reference each other as a safety net. |
-| Claude Code stores subagent transcripts at `~/.claude/projects/<project>/<session>/subagents/agent-<name>-<hash>.jsonl` (records: `type`, `message.content[]` with `tool_use` blocks, `timestamp`). | Benchmark assertions can be graded from *actual* tool-call order (Skill invocations, edit order, Agent spawns), not self-report. |
+| Claude Code stores subagent transcripts at `~/.claude/projects/<project>/<session>/subagents/agent-a<name>-<hash>.jsonl` (2.1.x: the agent id is `a` + name + `-` + a 16-hex hash; older versions omit the `a`; records: `type`, `message.content[]` with `tool_use` blocks, `timestamp`). | Benchmark assertions can be graded from *actual* tool-call order (Skill invocations, edit order, Agent spawns), not self-report. |
 | `using-superpowers` contains `<SUBAGENT-STOP>`; eval subagents ignore it. | All benchmark arms run without the SP bootstrap. The benchmark measures each skill's *own* routing — slightly harsher on the combo than a real session. Documented caveat. |
 | `claude` 2.1.266, python3, git, node available. skill-creator scripts (`aggregate_benchmark.py`, `generate_review.py`, `run_loop.py`) present. | Full skill-creator loop is usable: subagent runs → grader → aggregate → viewer → description optimizer. |
 
@@ -60,7 +60,7 @@ my-agent-workflow-skills/
 │   └── matt-pocock-superpowers-workflow/
 │       ├── SKILL.md
 │       └── references/
-│           ├── conflict-rules.md        §4 in full: 11-row table, review integration, protect pre-existing work
+│           ├── conflict-rules.md        §4 in full: 12-row table, review integration, protect pre-existing work
 │           ├── development-loop.md      §6 A–H in full
 │           ├── coordination.md          §7: coordinator rules, worker brief template, evidence budgets
 │           ├── quality-gates.md         §8: gate table, ready-for-review, ready-to-release
@@ -74,7 +74,7 @@ my-agent-workflow-skills/
 ├── benchmark/
 │   ├── README.md                  how to run an iteration end to end
 │   ├── fixture/                   "OrderKit" sandbox (see §7)
-│   ├── scenarios/<name>/          prompt.md + setup.sh + assertions.json per scenario
+│   ├── scenarios/<name>/          prompt.md + setup.sh (assertions live in benchmark/evals.json)
 │   ├── evals.json                 skill-creator eval set (prompts + assertions, both skills share it)
 │   └── runs/iteration-N/eval-N-<name>/<config>/run-1/
 │       ├── eval_metadata.json, timing.json, transcript.md, objective.json, grading.json   (committed)
@@ -164,7 +164,7 @@ Common to all scenarios: final `outputs/REPORT.md` exists; no file outside the w
 
 | # | Assertions |
 | --- | --- |
-| 1 | tests + typecheck pass · first edit under `tests/` precedes first edit under `src/pricing.ts` · at most one full TDD workflow invoked (`superpowers:test-driven-development` **or** MP `tdd`, not both as drivers — *judged* from transcript) · the ≥ $20 rule is covered by a test · assumptions stated once in the report (*judged*) |
+| 1 | tests + typecheck pass · first edit under `tests/` precedes first edit under `src/pricing.ts` · at most one full TDD workflow invoked (`superpowers:test-driven-development` **or** MP `tdd`, not both as drivers — *judged* from transcript) · the ≥ $20 rule is covered by a test · hidden acceptance tests AC1, AC2 and AC4 pass (AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt; scenario 5's spec mandates the throw) · assumptions stated once in the report (*judged*) |
 | 2 | no file under `tests/` created or modified · no `Agent` tool calls · exactly `README.md` and `src/format.ts` changed · suite still green · report does not claim tests were written |
 | 3 | a test using concurrent `reserve` calls (`Promise.all` or equivalent) was added **before** `src/inventory.ts` was edited · that test fails on baseline and passes after (re-run by `grade_run.py`) · a diagnosis skill was invoked before the first `src/` edit (`superpowers:systematic-debugging` or MP `diagnosing-bugs`) · original single-reserve tests still pass · report distinguishes verified fix from remaining risk (*judged*) |
 | 4 | no files modified · report names `src/scratch.ts` (untracked) and the unstaged `src/format.ts` change · report identifies the missing ≥ $20 rule as a spec gap · findings separated into standards vs spec (*judged*) · report does not say "ready to merge" |
