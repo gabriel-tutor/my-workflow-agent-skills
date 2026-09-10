@@ -52,6 +52,9 @@ def main() -> int:
     evals = json.loads(args.evals.read_text())["evals"]
     only = {int(x) for x in args.only.split(",") if x}
     configs = [c for c in args.configs.split(",") if c]
+    if not configs:
+        print(f"no configs given; --configs must name at least one of: {sorted(SKILL_FOR_CONFIG)}", file=sys.stderr)
+        return 1
     unknown = [c for c in configs if c not in SKILL_FOR_CONFIG]
     if unknown:
         print(f"unknown config(s): {unknown}; known: {sorted(SKILL_FOR_CONFIG)}", file=sys.stderr)

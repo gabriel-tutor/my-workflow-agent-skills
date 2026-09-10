@@ -36,6 +36,7 @@ You are grading one benchmark run. Read ~/.claude/skills/skill-creator/agents/gr
 - transcript_path: <run_dir>/transcript.md
 - outputs_dir: <run_dir>/outputs
 - objective checks already computed: <run_dir>/objective.json — when an expectation names one (e.g. "objective: tests_pass"), cite that check's evidence; the transcript decides the judged parts.
+- `objective.json`'s `files_changed` is authoritative for what the agent changed; `outputs/diff.patch` and `git-status.txt` also show scenario-setup state (e.g. the pre-dirtied `src/format.ts` in review-scope).
 
 Write <run_dir>/grading.json with `expectations` (fields exactly: text, passed, evidence), `summary`, `claims`, `user_notes_summary`, and `eval_feedback`. Do NOT include a `timing` field. Reply with the pass count only.
 ```
@@ -44,5 +45,6 @@ Write <run_dir>/grading.json with `expectations` (fields exactly: text, passed, 
 
 ```bash
 scripts/tests/test_prepare_run.sh
+scripts/tests/test_finalize_run.sh
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
