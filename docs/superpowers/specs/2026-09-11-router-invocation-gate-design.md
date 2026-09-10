@@ -96,9 +96,9 @@ Exit 0 with no output everywhere else: per the docs, that is "no decision", and 
 | `scripts/hooks/gate.py` | the decision function above; stdlib only |
 | `scripts/hooks/mark-skill.py` | `PostToolUse` marker writer |
 | `scripts/hooks/install.sh` | merge hook entries into `~/.claude/settings.json`; back up first; idempotent |
-| `scripts/hooks/uninstall.sh` | remove only entries this repo added; restore from backup |
+| `scripts/hooks/uninstall.sh` | remove only entries tagged `_mpsw`; never touch the user's own hooks |
 | `scripts/tests/test_gate.py` | crafted JSON on stdin → asserted decision, one case per numbered rule |
-| `scripts/tests/test_hook_install.sh` | install into a temp `HOME`, assert merge and idempotency, uninstall, assert byte-identical restore |
+| `scripts/tests/test_hook_install.sh` | install into a temp `HOME`, assert merge and idempotency, uninstall, assert JSON-equal restore |
 
 Hook scripts live in the repo and the global settings file references them by absolute path, so the code stays version-controlled and visible in the portfolio. If the repo moves, the missing script triggers rule "fail open" rather than breaking every project.
 
@@ -129,5 +129,5 @@ Install/uninstall is verified against a temp `HOME` so the real settings file is
 3. A repo listed in `mpsw-gate-ignore` is never gated.
 4. `MPSW_GATE=off` bypasses everything.
 5. `activate.sh none` disables the gate.
-6. Uninstall restores `~/.claude/settings.json` byte-identically.
+6. Uninstall leaves `~/.claude/settings.json` **JSON-equal** to its pre-install content: every unrelated key and every hook the user configured themselves survives, and no `_mpsw` entry remains. Byte-identity is not promised — install rewrites the file through a JSON serializer, so whitespace and key order may differ. A pre-install copy is kept at `settings.json.mpsw-backup` for manual recovery.
 7. No test touches the real `~/.claude/settings.json`.
