@@ -1,0 +1,66 @@
+{
+ "scenario": "concurrency-bug",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "src/inventory.ts",
+   "tests/inventory.test.ts",
+   "tests/orders.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [],
+ "agent_calls": 0,
+ "edit_events": [
+  [
+   6,
+   "src/inventory.ts"
+  ],
+  [
+   10,
+   "tests/inventory.test.ts"
+  ],
+  [
+   10,
+   "tests/orders.test.ts"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {},
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "/Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/without_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "concurrent_test_added": {
+   "passed": true,
+   "evidence": "tests with concurrent reserve(): ['tests/inventory.test.ts']"
+  },
+  "test_edited_before_inventory": {
+   "passed": false,
+   "evidence": "first test-file edit at event 10; first src/inventory.ts edit at event 6"
+  },
+  "diagnosis_skill_before_inventory_edit": {
+   "passed": false,
+   "evidence": "diagnosis skill at event None; first src/inventory.ts edit at event 6; skills: []"
+  },
+  "new_test_fails_on_baseline": {
+   "passed": true,
+   "evidence": "exit 1 with baseline src/inventory.ts: \u2026p((qty) => inv.reserve(\"A\u2026\n     45|     const reserved = qtys.reduce((sum, qty, i) => sum + (results[i] ? \u2026\n     46|     expect(reserved).toBeLessThanOrEqual(3);\n       |                      ^\n     47|     expect(inv.available(\"A\")).toBe(3 - reserved);\n     48|   });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[3/3]\u23af"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/without_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  20 passed (20)\n   Start at  04:36:56\n   Duration  128ms (transform 63%, import 16%, tests 15%, worker 6%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  }
+ }
+}

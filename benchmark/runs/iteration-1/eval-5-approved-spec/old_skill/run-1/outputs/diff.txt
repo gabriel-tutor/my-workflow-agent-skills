@@ -1,0 +1,79 @@
+diff --git a/CONTEXT.md b/CONTEXT.md
+index e70c05b..0ed0b8e 100644
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -4,7 +4,7 @@
+ - **Line** — one SKU in a Cart with a quantity and the unit price captured when it was added.
+ - **Subtotal** — sum of unit price × quantity across Lines, before any discount.
+ - **Tier discount** — a percentage off the subtotal based on total units in the Cart: 20+ units → 5%, 50+ units → 10%.
+-- **Coupon** — a code the customer enters that changes the total. Not implemented yet.
++- **Coupon** — a code the customer enters that reduces the total, applied after the Tier discount: `SAVE10` takes 10% off, `FLAT5` takes 500 cents off a Cart whose Subtotal is at least 2000 cents. Codes are case-insensitive.
+ - **Reservation** — a promise from Inventory that stock is held for a checkout. Over-selling (more reservations than stock) is a defect.
+ - **Order** — the result of a successful checkout: an id, the total in cents, and the lines.
+ 
+diff --git a/src/pricing.ts b/src/pricing.ts
+index 5401897..01286da 100644
+--- a/src/pricing.ts
++++ b/src/pricing.ts
+@@ -22,3 +22,17 @@ export function totalCents(cart: Cart): number {
+   const discount = Math.round((subtotal * tierDiscountPercent(cart)) / 100);
+   return subtotal - discount;
+ }
++
++/** Total after the tier discount and then the coupon, in integer cents. */
++export function applyCoupon(cart: Cart, code: string): number {
++  const total = totalCents(cart);
++  const normalized = code.toUpperCase();
++  if (normalized === "SAVE10") return total - Math.round((total * 10) / 100);
++  if (normalized === "FLAT5") {
++    if (subtotalCents(cart) < 2000) {
++      throw new Error(`coupon ${code} not applicable: subtotal must be at least 2000 cents`);
++    }
++    return total - 500;
++  }
++  throw new Error(`unknown coupon: ${code}`);
++}
+diff --git a/tests/pricing.test.ts b/tests/pricing.test.ts
+index eeecd87..677071c 100644
+--- a/tests/pricing.test.ts
++++ b/tests/pricing.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import { addLine, createCart } from "../src/cart";
+-import { tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
++import { applyCoupon, tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
+ 
+ function cartWithUnits(units: number, unitPriceCents = 100) {
+   return addLine(createCart(), { sku: "W", name: "Widget", unitPriceCents, qty: units });
+@@ -28,3 +28,31 @@ describe("pricing tiers", () => {
+     expect(totalUnits(cart)).toBe(20);
+   });
+ });
++
++describe("coupons", () => {
++  it("SAVE10 subtracts 10% of the total", () => {
++    expect(applyCoupon(cartWithUnits(19), "SAVE10")).toBe(1710);
++  });
++
++  it("rejects an unknown code", () => {
++    expect(() => applyCoupon(cartWithUnits(19), "BOGUS")).toThrow(/unknown coupon/);
++  });
++
++  it("FLAT5 checks the 2000-cent threshold against the subtotal, not the post-tier total", () => {
++    // 20 units → subtotal 2000 → tier 5% → 1900 → FLAT5 → 1400
++    expect(applyCoupon(cartWithUnits(20), "FLAT5")).toBe(1400);
++  });
++
++  it("FLAT5 is not applicable when the subtotal is below 2000 cents", () => {
++    expect(() => applyCoupon(cartWithUnits(19), "FLAT5")).toThrow(/not applicable/);
++  });
++
++  it("matches codes case-insensitively", () => {
++    expect(applyCoupon(cartWithUnits(19), "save10")).toBe(1710);
++  });
++
++  it("applies the coupon after the tier discount, rounding the discount", () => {
++    // 25 units → subtotal 2500 → tier 5% → 2375 → SAVE10 (237.5 → 238) → 2137
++    expect(applyCoupon(cartWithUnits(25), "SAVE10")).toBe(2137);
++  });
++});

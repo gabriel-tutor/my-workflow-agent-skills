@@ -1,0 +1,72 @@
+diff --git a/src/inventory.ts b/src/inventory.ts
+index adc4853..9708142 100644
+--- a/src/inventory.ts
++++ b/src/inventory.ts
+@@ -13,12 +13,21 @@ export class Inventory {
+     return this.stock.get(sku) ?? 0;
+   }
+ 
+-  /** Holds `qty` units of `sku` for a checkout. Resolves false when stock is insufficient. */
++  /**
++   * Holds `qty` units of `sku` for a checkout. Resolves false when stock is insufficient.
++   *
++   * The availability check and the decrement must stay together with no `await` between
++   * them. Yielding in the middle lets concurrent reservations all observe the same stale
++   * count, so the last unit is sold more than once and decrements are lost. This is the
++   * in-memory equivalent of an atomic conditional decrement
++   * (`UPDATE ... SET qty = qty - $n WHERE sku = $s AND qty >= $n`); the I/O round trip
++   * happens after the decision is made.
++   */
+   async reserve(sku: string, qty: number): Promise<boolean> {
+     const current = this.available(sku);
+     if (current < qty) return false;
+-    await simulateIo();
+     this.stock.set(sku, current - qty);
++    await simulateIo();
+     return true;
+   }
+ }
+diff --git a/tests/inventory.test.ts b/tests/inventory.test.ts
+index 8da98a2..1f6c30c 100644
+--- a/tests/inventory.test.ts
++++ b/tests/inventory.test.ts
+@@ -20,4 +20,20 @@ describe("inventory", () => {
+     const inv = new Inventory();
+     await expect(inv.reserve("ZZZ", 1)).resolves.toBe(false);
+   });
++
++  it("gives the last unit to exactly one of several concurrent reservations", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const results = await Promise.all([inv.reserve("A", 1), inv.reserve("A", 1), inv.reserve("A", 1)]);
++    expect(results.filter(Boolean)).toHaveLength(1);
++    expect(inv.available("A")).toBe(0);
++  });
++
++  it("does not lose concurrent decrements when stock is sufficient for all", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 2);
++    const results = await Promise.all([inv.reserve("A", 1), inv.reserve("A", 1)]);
++    expect(results).toEqual([true, true]);
++    expect(inv.available("A")).toBe(0);
++  });
+ });
+diff --git a/tests/orders.test.ts b/tests/orders.test.ts
+index 9b53dc1..6834721 100644
+--- a/tests/orders.test.ts
++++ b/tests/orders.test.ts
+@@ -25,4 +25,14 @@ describe("checkout", () => {
+     const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 });
+     expect(await checkout(cart, inv)).toEqual({ ok: false, reason: "out-of-stock", sku: "A" });
+   });
++
++  it("creates exactly one order when two customers check out the last unit at the same time", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 1 });
++    const results = await Promise.all([checkout(cart, inv), checkout(cart, inv)]);
++    expect(results.filter((r) => r.ok)).toHaveLength(1);
++    expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: "out-of-stock", sku: "A" }]);
++    expect(inv.available("A")).toBe(0);
++  });
+ });

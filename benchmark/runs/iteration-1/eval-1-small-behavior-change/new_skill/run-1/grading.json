@@ -1,0 +1,99 @@
+{
+ "expectations": [
+  {
+   "text": "Tests and typecheck pass on the final workspace (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json checks.tests_pass: 'Test Files 5 passed (5) / Tests 22 passed (22)'; checks.typecheck_pass passed with empty (clean) tsc output. Corroborated by outputs/test-output.txt (22 passed) and outputs/typecheck-output.txt (empty = no errors), and transcript step [54] 'npm run typecheck ... exit=0'."
+  },
+  {
+   "text": "A test file was written or edited before src/pricing.ts was first edited (objective: test_edited_before_pricing)",
+   "passed": true,
+   "evidence": "objective.json checks.test_edited_before_pricing: 'first test-file edit at event 11; first src/pricing.ts edit at event 12'. Transcript step [11] edits tests/pricing.test.ts (adds the applyCoupon import plus new coupon tests); step [12] is the first edit to src/pricing.ts (implementing SAVE10 + unknown-code throw), matching the report's own RED-before-GREEN narrative ('Cycle 1 RED ... GREEN after SAVE10 + unknown-code implementation')."
+  },
+  {
+   "text": "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+   "passed": true,
+   "evidence": "objective.json checks.single_tdd_driver: \"TDD driver skills invoked: ['superpowers:test-driven-development']\". Transcript step [10] invokes superpowers:test-driven-development via the Skill tool, and it drives the RED/GREEN cycles at steps [11]-[14]. Matt Pocock's tdd/tests.md and tdd/mocking.md are only read with `cat` at step [9] (never invoked via the Skill tool) -- consistent with the allowed 'read only as a reference' exception, and the report itself frames it that way: 'SP/test-driven-development (2 RED->GREEN cycles; MP tdd/tests.md, tdd/mocking.md, SP writing-good-tests.md consulted)'."
+  },
+  {
+   "text": "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+   "passed": true,
+   "evidence": "objective.json checks.flat5_has_test: tests mentioning FLAT5 found in tests/pricing.test.ts. Reading the test (outputs/diff.txt): 'FLAT5 leaves the total unchanged when the subtotal is under $20' uses cartWithUnits(1, 1999) -- a $19.99 subtotal, below the $20 floor -- and expects the total unchanged at 1999. The threshold is also tested exactly at $20 (2000 -> 1500) and with a case distinguishing subtotal from the tier-discounted total (20x100: subtotal 2000 qualifies even though the tier-discounted total is 1900)."
+  },
+  {
+   "text": "The hidden acceptance tests AC1, AC2 and AC4 pass against the implementation (objective: hidden_acceptance_all_pass; AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt)",
+   "passed": true,
+   "evidence": "objective.json hidden_tests: 'AC1 SAVE10 subtracts 10% of the post-tier total': passed, 'AC2 FLAT5 subtracts 500 when the subtotal is at least 2000': passed, 'AC4 an unknown code throws': passed. checks.hidden_acceptance_all_pass.passed = true with the same evidence."
+  },
+  {
+   "text": "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user",
+   "passed": true,
+   "evidence": "outputs/REPORT.md '## Assumptions' section states each once: #1 stacking ('The coupon applies to the tier-discounted total ... not additively to the subtotal'), #5 rounding ('Rounding uses Math.round, per CONTEXT.md'), #4 case handling ('Codes match exactly (case-sensitive, no trimming); save10 is an unknown code'). No question is posed to the user anywhere in the report -- the 'What remains' section lists finishing-a-development-branch options it could not resolve but explicitly leaves the diff uncommitted per the harness rule rather than asking."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "745 consecutive npm test runs, 745/745 passed (REPORT.md 'What I verified' / determinism check)",
+   "type": "quality",
+   "verified": false,
+   "evidence": "The transcript shows nine separate determinism loops (steps [59],[60],[61],[64]-[69]) of sizes 15, 30, 40, 60, 100, 100, 150, 150, 250, every one reported as fully passing (e.g. '250/250'). Those sizes sum to 895, not 745. Each individual loop's 100%-pass claim is directly verified, but the aggregate figure the report states (745) does not match the runs visible in its own transcript -- likely a self-reporting/arithmetic error rather than a fabrication, since no failing run is shown anywhere."
+  },
+  {
+   "claim": "Mutation check: swapping Math.round for Math.ceil in SAVE10 is caught by exactly one test, and case-insensitive code matching is caught by exactly one test",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript step [70]: 'mutant A: Math.ceil instead of Math.round in SAVE10' -> 'FAIL ... SAVE10 rounds the discount to the nearest cent' (1 failed, 10 passed); 'mutant B: case-insensitive code match' -> 'FAIL ... rejects an unknown code' (1 failed, 10 passed)."
+  },
+  {
+   "claim": "Coupons are not wired into checkout (src/orders.ts); out of scope for this request",
+   "type": "factual",
+   "verified": true,
+   "evidence": "objective.json files_changed.modified = ['CONTEXT.md', 'src/pricing.ts', 'tests/pricing.test.ts'] -- src/orders.ts is untouched, matching the claim."
+  },
+  {
+   "claim": "An independent reviewer subagent found no Critical/Important issues, 5 Minor, and a re-review after fixes returned verdict 'Yes' with no new issues",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript step [20] shows a real review subagent invocation returning substantive per-file findings (not fabricated). The final teammate message from the reviewer (color=purple, summary 'Re-review confirmed: verdict Yes') independently re-ran a mutation harness against the fixed tests and confirmed all four review follow-up questions -- consistent with an initial review that had raised the three Minor findings the agent says it fixed."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+    "reason": "As computed, single_tdd_driver only guards against invoking both drivers ('TDD driver skills invoked' is checked against a list). A run that invoked neither driver -- skipping TDD entirely and just writing the implementation -- would produce an empty list, which is also not 'both', and would pass under the current check. This run genuinely used TDD (verified independently via the RED/GREEN evidence in the transcript), but the assertion as written is not discriminating against a 'zero drivers' failure mode; consider requiring the list to contain exactly one entry, not merely at-most-one."
+   },
+   {
+    "reason": "No assertion covers process efficiency or self-report accuracy, and this run has a notable gap on both: it took ~29 minutes and 71 tool calls (metrics.json/timing.json) for a small, well-scoped change, with a long stretch (transcript steps [27]-[51]) spent in confused sleep/Monitor loops trying to wait on a subagent's re-review reply, plus nine separate determinism loops (895 total npm test invocations) where a handful would have sufficed. The report also mis-states that total as '745/745', a discrepancy noted in claims above. None of this affected correctness, so it doesn't change any expectation's verdict, but it's worth knowing the eval currently has no signal on wasted time/tokens or on the accuracy of the executor's own self-reported metrics."
+   }
+  ],
+  "overall": "The six expectations are well-targeted and all pass on genuine evidence, not surface compliance: the implementation, its tests, the hidden acceptance tests, and the assumptions writeup all hold up under inspection. The two suggestions above are about gaps the current assertions don't reach (a driver-skipping loophole in single_tdd_driver, and a complete absence of any efficiency/self-report-accuracy check) rather than problems with this run's grading."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 6,
+   "Bash": 52,
+   "Skill": 5,
+   "Agent": 2,
+   "ToolSearch": 2,
+   "SendMessage": 1,
+   "Monitor": 3
+  },
+  "total_tool_calls": 71,
+  "total_steps": 73,
+  "errors_encountered": 1,
+  "output_chars": 5794,
+  "transcript_chars": 43603
+ }
+}

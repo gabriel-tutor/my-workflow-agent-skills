@@ -62,4 +62,10 @@ printf '{"total_tokens": 1, "duration_ms": 1, "total_duration_seconds": 0.0}\n' 
 python3 "$REPO/scripts/timing_from_run.py" "$RUN_DIR" >/dev/null
 grep -q '"total_tokens": 1,' "$RUN_DIR/timing.json" || fail "existing timing.json must be left untouched"
 
+# REPORT.md is extracted from the transcript when absent (fixture has no # REPORT heading → last text block)
+grep -q "Done. Tests pass." "$RUN_DIR/outputs/REPORT.md" || fail "REPORT.md should hold the agent's final text, got: $(cat "$RUN_DIR/outputs/REPORT.md")"
+printf 'keep me\n' > "$RUN_DIR/outputs/REPORT.md"
+python3 "$REPO/scripts/report_from_jsonl.py" "$RUN_DIR" >/dev/null
+grep -q "keep me" "$RUN_DIR/outputs/REPORT.md" || fail "existing REPORT.md must be left untouched"
+
 echo "test_finalize_run: OK"

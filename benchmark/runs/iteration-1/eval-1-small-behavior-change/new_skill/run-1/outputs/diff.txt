@@ -1,0 +1,97 @@
+diff --git a/CONTEXT.md b/CONTEXT.md
+index e70c05b..55630be 100644
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -4,7 +4,7 @@
+ - **Line** — one SKU in a Cart with a quantity and the unit price captured when it was added.
+ - **Subtotal** — sum of unit price × quantity across Lines, before any discount.
+ - **Tier discount** — a percentage off the subtotal based on total units in the Cart: 20+ units → 5%, 50+ units → 10%.
+-- **Coupon** — a code the customer enters that changes the total. Not implemented yet.
++- **Coupon** — a code the customer enters that changes the total, applied after the Tier discount. `SAVE10` takes 10% off the total. `FLAT5` takes $5 off, but only when the Subtotal is at least $20; below that it takes nothing off. Codes must match exactly; an unknown code is rejected.
+ - **Reservation** — a promise from Inventory that stock is held for a checkout. Over-selling (more reservations than stock) is a defect.
+ - **Order** — the result of a successful checkout: an id, the total in cents, and the lines.
+ 
+diff --git a/src/pricing.ts b/src/pricing.ts
+index 5401897..eb4162a 100644
+--- a/src/pricing.ts
++++ b/src/pricing.ts
+@@ -22,3 +22,23 @@ export function totalCents(cart: Cart): number {
+   const discount = Math.round((subtotal * tierDiscountPercent(cart)) / 100);
+   return subtotal - discount;
+ }
++
++/**
++ * Coupon codes → what the code takes off the tier-discounted total, in cents. A flat amount
++ * must stay below the smallest total that qualifies for it, so a total never goes negative.
++ */
++const COUPONS: ReadonlyArray<{
++  code: string;
++  discountCents: (amounts: { subtotal: number; total: number }) => number;
++}> = [
++  { code: "SAVE10", discountCents: ({ total }) => Math.round((total * 10) / 100) },
++  { code: "FLAT5", discountCents: ({ subtotal }) => (subtotal >= 2000 ? 500 : 0) },
++];
++
++/** Total after the tier discount and the coupon, in integer cents. Throws on an unknown code. */
++export function applyCoupon(cart: Cart, code: string): number {
++  const coupon = COUPONS.find((c) => c.code === code);
++  if (!coupon) throw new Error(`Unknown coupon code: ${code}`);
++  const total = totalCents(cart);
++  return total - coupon.discountCents({ subtotal: subtotalCents(cart), total });
++}
+diff --git a/tests/pricing.test.ts b/tests/pricing.test.ts
+index eeecd87..c559a51 100644
+--- a/tests/pricing.test.ts
++++ b/tests/pricing.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import { addLine, createCart } from "../src/cart";
+-import { tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
++import { applyCoupon, tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
+ 
+ function cartWithUnits(units: number, unitPriceCents = 100) {
+   return addLine(createCart(), { sku: "W", name: "Widget", unitPriceCents, qty: units });
+@@ -28,3 +28,43 @@ describe("pricing tiers", () => {
+     expect(totalUnits(cart)).toBe(20);
+   });
+ });
++
++describe("coupons", () => {
++  it("SAVE10 takes 10% off the total", () => {
++    // 3 x 450 = 1350, no tier; 10% = 135
++    expect(applyCoupon(cartWithUnits(3, 450), "SAVE10")).toBe(1215);
++  });
++
++  it("SAVE10 rounds the discount to the nearest cent", () => {
++    // 10% of 1005 = 100.5 → 101; 10% of 1234 = 123.4 → 123
++    expect(applyCoupon(cartWithUnits(1, 1005), "SAVE10")).toBe(904);
++    expect(applyCoupon(cartWithUnits(1, 1234), "SAVE10")).toBe(1111);
++  });
++
++  it("SAVE10 applies on top of the tier discount", () => {
++    // 50 x 100 = 5000 → 10% tier → 4500 → 10% coupon → 4050
++    expect(applyCoupon(cartWithUnits(50), "SAVE10")).toBe(4050);
++  });
++
++  it("FLAT5 takes $5 off when the subtotal is at least $20", () => {
++    // 4 x 500 = 2000, exactly the threshold; no tier
++    expect(applyCoupon(cartWithUnits(4, 500), "FLAT5")).toBe(1500);
++  });
++
++  it("FLAT5 leaves the total unchanged when the subtotal is under $20", () => {
++    expect(applyCoupon(cartWithUnits(1, 1999), "FLAT5")).toBe(1999);
++  });
++
++  it("FLAT5 checks the subtotal before the tier discount", () => {
++    // 20 x 100 = 2000 subtotal qualifies even though the 5% tier brings the total to 1900
++    expect(applyCoupon(cartWithUnits(20), "FLAT5")).toBe(1400);
++  });
++
++  it("rejects an unknown code", () => {
++    expect(() => applyCoupon(cartWithUnits(1), "BOGUS")).toThrow(/BOGUS/);
++    // codes match exactly: no case folding
++    expect(() => applyCoupon(cartWithUnits(1), "save10")).toThrow(/save10/);
++    // codes are customer input; an inherited object property is not a coupon
++    expect(() => applyCoupon(cartWithUnits(1), "toString")).toThrow(/toString/);
++  });
++});

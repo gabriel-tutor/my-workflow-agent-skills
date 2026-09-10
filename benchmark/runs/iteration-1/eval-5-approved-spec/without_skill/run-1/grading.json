@@ -1,0 +1,100 @@
+{
+ "expectations": [
+  {
+   "text": "No design interview skill was invoked: no superpowers:brainstorming, grill-me, grill-with-docs, or grilling (objective: no_design_interview_skill)",
+   "passed": true,
+   "evidence": "objective.json: skills_invoked=[], agent_calls=0, checks.no_design_interview_skill={passed:true, evidence:\"interview skills invoked: none\"}. Transcript confirms: the run is 9 direct Bash tool calls (git status/read spec/read source/read tests/run baseline tests+typecheck/write src/pricing.ts/write tests/mutation-test via a scratchpad copy/fix CONTEXT.md+diff) followed by the REPORT message \u2014 no Skill or Agent invocation of any kind, design-interview or otherwise, appears anywhere."
+  },
+  {
+   "text": "Tests and typecheck pass (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json checks.tests_pass={passed:true, evidence:\"Test Files 5 passed (5) / Tests 21 passed (21)\"} and checks.typecheck_pass={passed:true, evidence:\"\"}. outputs/test-output.txt reproduces the same '5 passed (5)' / '21 passed (21)' result; outputs/typecheck-output.txt is empty (tsc --noEmit exits clean with no output). Transcript step [6] shows the same after the implementation was written, and step [4] shows the 15-passed baseline before, confirming the 6 new tests are additive and nothing pre-existing broke."
+  },
+  {
+   "text": "All eight hidden acceptance tests pass, i.e. every criterion in docs/spec-coupons.md is implemented (objective: hidden_acceptance_all_pass; list any failing AC)",
+   "passed": true,
+   "evidence": "objective.json checks.hidden_acceptance_all_pass={passed:true} and hidden_tests lists all 8 as \"passed\": AC1 SAVE10 10%, AC2 FLAT5 subtotal>=2000, AC3/AC3m FLAT5-below-threshold (Error) and message variant, AC4/AC4m unknown-code (Error) and message variant, AC5 case-insensitivity, AC6 stacking. No failing AC. Cross-checked against workspace/src/pricing.ts: applyCoupon uppercases the code, throws 'unknown coupon: <code>' on a miss (AC4/4m), computes total via the untouched totalCents, for 'percent' does total-Math.round(total*percent/100) (AC1), for 'flat' gates on subtotalCents(cart) < minSubtotalCents(2000) and throws 'coupon FLAT5 not applicable: subtotal must be at least 2000 cents' (AC2/AC3/AC3m), matching case-insensitively via toUpperCase (AC5). Independently recomputed AC6: 25 units x 100c = 2500 subtotal; TIERS=[{50,10%},{20,5%}] so 25 units hits the 20+ tier (5%) -> 2500-125=2375; SAVE10 -> 2375-Math.round(237.5)=2375-238=2137, matching the spec's example exactly."
+  },
+  {
+   "text": "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+   "passed": true,
+   "evidence": "objective.json checks.coupon_tests_exist={passed:true, evidence:\"tests exercising applyCoupon: ['tests/pricing.test.ts']\"}. Read tests/pricing.test.ts (via diff.txt): a new describe(\"coupons\") block adds exactly 6 it() cases, one per AC, each calling applyCoupon(cart, code) on carts built only through the existing cartWithUnits helper (itself addLine(createCart(), ...)) or createCart() directly; the only other public export touched is totalCents (used once, to assert it stays unchanged per AC6/spec). No internal helper (COUPONS table, the Coupon type, or the code-normalization step) is imported or tested directly \u2014 matches the spec's test seam verbatim: 'Tests exercise applyCoupon through the public module interface with carts built via createCart / addLine. No internal helpers are tested directly.'"
+  },
+  {
+   "text": "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+   "passed": true,
+   "evidence": "objective.json checks.single_execution_mode={passed:true, evidence:\"execution-mode skills invoked: none (direct)\"}. Transcript shows the implementation done directly via Bash (cat > src/pricing.ts <<'EOF', cat > tests/pricing.test.ts <<'EOF') with no execution-mode skill invoked at all, so no conflict between two modes is possible. Note: in this without_skill run no skill tooling was available/used in the first place, so this check has no real chance to fail here \u2014 see eval_feedback."
+  },
+  {
+   "text": "The report maps the spec's acceptance criteria to verification evidence rather than restating the spec",
+   "passed": true,
+   "evidence": "outputs/REPORT.md does not reproduce the spec's AC list at all; instead it gives concrete, criterion-specific evidence: the 'What changed' section ties the 6 new tests to specific behaviors (rounding case for AC1, subtotal-exactly-2000 boundary for AC2, below-threshold + empty-cart for AC3, BOGUS/empty-string for AC4, save10/Flat5 for AC5, the spec's own 25x100->2137 example for AC6); 'What I verified' reports before/after test+typecheck runs (15->21 passed, clean typecheck) and two targeted mutation tests whose failures are explicitly tied to spec requirements ('Gating FLAT5 on the post-tier total instead of subtotalCents(cart) -> 1 failed' maps to the AC2/AC3 subtotal gate; 'Math.floor instead of Math.round for SAVE10 -> 2 failed' maps to AC1's rounding requirement), plus a hand-recomputation of the AC6 stacking example ('2500 -> -125 -> 2375 -> -round(237.5)=238 -> 2137. Matches criterion 6') and a git-status check confirming only the 3 intended files changed. This is verification evidence mapped to criteria, not a restatement."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "totalCents, tierDiscountPercent, and totalUnits are byte-for-byte unchanged",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows the src/pricing.ts hunk is purely additive (+lines only: the Coupon type, COUPONS table, and applyCoupon function); no '-' lines touch the existing totalUnits, tierDiscountPercent, or totalCents bodies."
+  },
+  {
+   "claim": "Added a describe(\"coupons\") block with 6 tests, one per acceptance criterion",
+   "type": "factual",
+   "verified": true,
+   "evidence": "diff.txt shows exactly six it(...) blocks inside describe(\"coupons\"), matching AC1 (SAVE10 rounding), AC2 (FLAT5 >= 2000), AC3 (FLAT5 below threshold throws), AC4 (unknown code throws), AC5 (case-insensitivity), AC6 (stacking + totalCents unchanged)."
+  },
+  {
+   "claim": "Hand-checked the spec's example: 2500 -> -125 -> 2375 -> -round(237.5)=238 -> 2137. Matches criterion 6.",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Independently recomputed from workspace/src/pricing.ts: TIERS=[{minUnits:50,percent:10},{minUnits:20,percent:5}], 25 units matches the 20+ tier (5%) since 25<50, giving 2500-125=2375; SAVE10 then subtracts Math.round(2375*10/100)=Math.round(237.5)=238, giving 2137 \u2014 identical to the spec's stated example."
+  },
+  {
+   "claim": "FLAT5 never needs clamping to zero: the subtotal >= 2000 gate with a maximum 10% tier means the post-tier total is always >= 1800 before subtracting 500",
+   "type": "quality",
+   "verified": true,
+   "evidence": "src/pricing.ts TIERS caps at 10% (50+ units); the minimum eligible subtotal for FLAT5 is 2000, so the worst case post-tier total is 2000*0.9=1800, and 1800-500=1300 > 0 in all cases \u2014 the reasoning holds regardless of which units/price combination produces the 2000-cent subtotal."
+  },
+  {
+   "claim": "Mutation 2 (Math.floor instead of Math.round for SAVE10) produced '2 failed | 8 passed' with 'expected 473 to be 472' and 'expected 2138 to be 2137'",
+   "type": "process",
+   "verified": false,
+   "evidence": "Not independently confirmable: transcript.md truncates the Bash result for step [7] immediately after '=== mutation 2: Math.floor i\u2026' (1310 characters omitted), so the exact failure counts/messages for this second mutation are not visible in the transcript. Mutation 1's result (gating FLAT5 on total vs subtotal, '1 failed | 9 passed') is fully shown and matches the report exactly, and the claimed numbers for mutation 2 are internally consistent with the test file's values (525c line -> 52.5 rounds to 53 normally, i.e. 472; floor would give 473), but the raw tool output isn't present to cite directly."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+    "reason": "In the without_skill condition no execution-mode skill is available/used at all, so this check is trivially satisfied by 'neither' rather than discriminating a real 'used exactly one, not both' choice. It only has discriminating power in the with_skill/combo variants where both modes are actually invocable; consider scoping this expectation out of without_skill runs or noting that a pass here just means 'no skill tooling was invoked.'"
+   },
+   {
+    "assertion": "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+    "reason": "coupon_tests_exist only checks that a test file imports/calls applyCoupon through the public seam \u2014 it wouldn't catch weak or tautological tests (e.g. asserting a value equal to whatever the implementation returns). In this run the tests happen to be strong (fixed expected numbers per criterion, plus voluntary mutation testing in the report), but that rigor isn't something the assertion itself verifies \u2014 it's incidental to this executor's choices."
+   }
+  ],
+  "overall": "Both failure modes worth flagging are about discriminating power for future/other run variants, not about this run's outcome: the implementation is complete and correct against all 8 hidden ACs, the tests are seam-compliant and criterion-mapped, and the report gives genuine per-criterion verification evidence (including two targeted mutation tests) rather than restating the spec."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Bash": 9
+  },
+  "total_tool_calls": 9,
+  "total_steps": 10,
+  "errors_encountered": 0,
+  "output_chars": 4656,
+  "transcript_chars": 12288
+ }
+}

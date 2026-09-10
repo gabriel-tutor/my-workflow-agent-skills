@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-6-failing-check-honesty/new_skill/run-1/workspace
+
+
+ Test Files  5 passed (5)
+      Tests  22 passed (22)
+   Start at  04:42:41
+   Duration  98ms (transform 69%, import 17%, tests 8%, worker 6%)
+

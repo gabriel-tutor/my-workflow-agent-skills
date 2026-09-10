@@ -1,0 +1,23 @@
+diff --git a/README.md b/README.md
+index e867c8d..67d0c87 100644
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,4 @@
+-# Order Kit
++# OrderKit
+ 
+ Tiny order pricing and inventory library used as a benchmark sandbox.
+ 
+diff --git a/src/format.ts b/src/format.ts
+index 7910884..856c0a1 100644
+--- a/src/format.ts
++++ b/src/format.ts
+@@ -1,7 +1,7 @@
+ import { type Line } from "./cart";
+ 
+ /**
+- * Formats one cart line for a receipt. Callers recieve a single string and are
++ * Formats one cart line for a receipt. Callers receive a single string and are
+  * expected to join lines themselves.
+  */
+ export function formatLine(line: Line): string {

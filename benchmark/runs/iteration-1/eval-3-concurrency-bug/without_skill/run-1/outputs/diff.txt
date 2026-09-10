@@ -1,0 +1,129 @@
+diff --git a/src/inventory.ts b/src/inventory.ts
+index adc4853..6cf8935 100644
+--- a/src/inventory.ts
++++ b/src/inventory.ts
+@@ -1,9 +1,19 @@
+ /**
+  * In-memory stock ledger. `reserve` is async because production hits a database;
+  * the simulated I/O gap models that round trip.
++ *
++ * Reservations for the same SKU are serialized: the check-and-decrement inside
++ * `reserve` runs as a critical section that no other reservation of that SKU can
++ * interleave with, even across the I/O gap. Without this, two checkouts racing for
++ * the last unit both pass the stock check and both succeed (an oversell), while the
++ * stale snapshot each one writes back leaves the ledger reading 0 instead of -1.
++ * This is the in-process analogue of a row lock; a real database adapter must make
++ * the same guarantee with an atomic conditional decrement or `SELECT ... FOR UPDATE`.
+  */
+ export class Inventory {
+   private stock = new Map<string, number>();
++  /** Tail of the queue of in-flight reservations, per SKU. Absent when the SKU is idle. */
++  private queues = new Map<string, Promise<void>>();
+ 
+   setStock(sku: string, qty: number): void {
+     this.stock.set(sku, qty);
+@@ -14,15 +24,36 @@ export class Inventory {
+   }
+ 
+   /** Holds `qty` units of `sku` for a checkout. Resolves false when stock is insufficient. */
+-  async reserve(sku: string, qty: number): Promise<boolean> {
+-    const current = this.available(sku);
+-    if (current < qty) return false;
+-    await simulateIo();
+-    this.stock.set(sku, current - qty);
+-    return true;
++  reserve(sku: string, qty: number): Promise<boolean> {
++    return this.serialized(sku, async () => {
++      const current = this.available(sku);
++      if (current < qty) return false;
++      await simulateIo();
++      this.stock.set(sku, current - qty);
++      return true;
++    });
++  }
++
++  /**
++   * Runs `task` once every reservation queued ahead of it for `sku` has settled, and
++   * makes later ones wait for it. Reservations for different SKUs never block each other.
++   */
++  private serialized<T>(sku: string, task: () => Promise<T>): Promise<T> {
++    const previous = this.queues.get(sku) ?? Promise.resolve();
++    const run = previous.then(task);
++    // The tail never rejects, so a failed task (e.g. an I/O error) releases the queue
++    // instead of wedging every later reservation of the SKU behind it.
++    const tail = run.then(noop, noop);
++    this.queues.set(sku, tail);
++    void tail.then(() => {
++      if (this.queues.get(sku) === tail) this.queues.delete(sku);
++    });
++    return run;
+   }
+ }
+ 
+ function simulateIo(): Promise<void> {
+   return new Promise((resolve) => setTimeout(resolve, 1));
+ }
++
++function noop(): void {}
+diff --git a/tests/inventory.test.ts b/tests/inventory.test.ts
+index 8da98a2..9fdfd65 100644
+--- a/tests/inventory.test.ts
++++ b/tests/inventory.test.ts
+@@ -20,4 +20,38 @@ describe("inventory", () => {
+     const inv = new Inventory();
+     await expect(inv.reserve("ZZZ", 1)).resolves.toBe(false);
+   });
++
++  it("gives the last unit to only one of two racing reservations", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const results = await Promise.all([inv.reserve("A", 1), inv.reserve("A", 1)]);
++    expect(results.filter(Boolean)).toHaveLength(1);
++    expect(inv.available("A")).toBe(0);
++  });
++
++  it("never reserves more than the stock under contention", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 5);
++    const results = await Promise.all(Array.from({ length: 20 }, () => inv.reserve("A", 1)));
++    expect(results.filter(Boolean)).toHaveLength(5);
++    expect(inv.available("A")).toBe(0);
++  });
++
++  it("keeps the ledger consistent when racing reservations have mixed quantities", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 3);
++    const qtys = [2, 2, 1];
++    const results = await Promise.all(qtys.map((qty) => inv.reserve("A", qty)));
++    const reserved = qtys.reduce((sum, qty, i) => sum + (results[i] ? qty : 0), 0);
++    expect(reserved).toBeLessThanOrEqual(3);
++    expect(inv.available("A")).toBe(3 - reserved);
++  });
++
++  it("does not let a refused reservation block later ones for the same sku", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    await expect(inv.reserve("A", 2)).resolves.toBe(false);
++    await expect(inv.reserve("A", 1)).resolves.toBe(true);
++    expect(inv.available("A")).toBe(0);
++  });
+ });
+diff --git a/tests/orders.test.ts b/tests/orders.test.ts
+index 9b53dc1..59fdc36 100644
+--- a/tests/orders.test.ts
++++ b/tests/orders.test.ts
+@@ -25,4 +25,14 @@ describe("checkout", () => {
+     const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 });
+     expect(await checkout(cart, inv)).toEqual({ ok: false, reason: "out-of-stock", sku: "A" });
+   });
++
++  it("lets only one of two checkouts racing for the last unit succeed", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 1 });
++    const results = await Promise.all([checkout(cart, inv), checkout(cart, inv)]);
++    expect(results.filter((r) => r.ok)).toHaveLength(1);
++    expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: "out-of-stock", sku: "A" }]);
++    expect(inv.available("A")).toBe(0);
++  });
+ });

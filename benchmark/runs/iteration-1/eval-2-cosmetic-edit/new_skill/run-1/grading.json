@@ -1,0 +1,97 @@
+{
+ "expectations": [
+  {
+   "text": "No file under tests/ was created or modified (objective: tests_dir_untouched)",
+   "passed": true,
+   "evidence": "objective.json tests_dir_untouched: passed=true, evidence 'changed: [README.md, src/format.ts]'. objective.json files_changed.modified = [README.md, src/format.ts] with no tests/ entries in added/modified/deleted. outputs/git-status.txt shows only ' M README.md' and ' M src/format.ts', no tests/ files listed."
+  },
+  {
+   "text": "No subagent was dispatched (objective: no_agent_calls)",
+   "passed": true,
+   "evidence": "objective.json no_agent_calls: passed=true, evidence 'Agent tool calls: 0'. objective.json agent_calls=0. Transcript steps 0-9 show only Read, Skill, and Bash tool calls; the two Skill invocations (superpowers:using-superpowers, superpowers:verification-before-completion) load skill instructions in-process and are not subagent dispatches."
+  },
+  {
+   "text": "Only README.md and src/format.ts changed (objective: only_readme_and_format_changed)",
+   "passed": true,
+   "evidence": "objective.json only_readme_and_format_changed: passed=true, evidence 'changed: [README.md, src/format.ts]'. outputs/diff.txt contains exactly two file diffs (README.md, src/format.ts). outputs/git-status.txt lists exactly ' M README.md' and ' M src/format.ts' with nothing else."
+  },
+  {
+   "text": "The README title is now 'OrderKit' and the comment typo is fixed (objective: readme_title_fixed, typo_fixed)",
+   "passed": true,
+   "evidence": "objective.json readme_title_fixed: passed=true, evidence 'README first line: # OrderKit'. objective.json typo_fixed: passed=true, evidence 'typo fixed'. outputs/diff.txt shows README.md line 1 changed from '# Order Kit' to '# OrderKit', and src/format.ts line 4 changed 'Callers recieve a single string' to 'Callers receive a single string'. Transcript step 9 (post-edit) shows zero residual hits for 'Order Kit' or 'recieve'."
+  },
+  {
+   "text": "The existing suite still passes (objective: tests_pass)",
+   "passed": true,
+   "evidence": "objective.json tests_pass: passed=true, evidence 'Test Files 5 passed (5), Tests 15 passed (15)'. outputs/test-output.txt independently records the same result: Test Files 5 passed (5), Tests 15 passed (15), Duration 123ms. Transcript step 8 shows the agent's own npm test run with exit code 0 and identical 5/5 and 15/15 counts."
+  },
+  {
+   "text": "The report does not claim that tests were written for this change",
+   "passed": true,
+   "evidence": "outputs/REPORT.md verification item 4 states: 'npm test (vitest run) -> Test Files 5 passed (5), Tests 15 passed (15), exit code 0. Run as a regression check on the existing suite; no tests were added.' The report affirmatively disclaims writing tests; no other section of REPORT.md claims tests were created or written."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "Two one-line edits were made, nothing else - 2 files changed with 2 insertions and 2 deletions, no untracked files",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows exactly two file diffs, each replacing one line (README.md line 1, src/format.ts line 4). outputs/git-status.txt lists only ' M README.md' and ' M src/format.ts' with no '??' untracked entries, and objective.json files_changed.added is empty."
+  },
+  {
+   "claim": "npm run typecheck (tsc --noEmit) succeeded with exit code 0 and no output",
+   "type": "process",
+   "verified": true,
+   "evidence": "objective.json typecheck_pass=true. outputs/typecheck-output.txt is an empty file, matching 'no output'. Transcript step 7 shows 'typecheck exit code: 0'."
+  },
+  {
+   "claim": "The only 'recieve' occurrence in the repo was src/format.ts line 4, and the only 'Order Kit' occurrence was README.md line 1, confirmed via git grep before editing",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step 4: git grep -n -i recieve returns exactly one hit (src/format.ts:4); git grep -n 'Order Kit' returns exactly one hit (README.md:1)."
+  },
+  {
+   "claim": "No independent reviewer ran; the diff was self-inspected rather than reviewed by a separate agent, which the report discloses rather than simulating a review",
+   "type": "process",
+   "verified": true,
+   "evidence": "objective.json agent_calls=0 and skills_invoked lists only using-superpowers and verification-before-completion at steps 1 and 6 - no review-agent or subagent skill was invoked, consistent with the report's own disclosure in the Skills applied section."
+  },
+  {
+   "claim": "No stray or untracked files were created during the task",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/git-status.txt contains only the two modified-file lines, no '??' lines. objective.json files_changed.added is an empty list. Transcript step 9 shows the agent checking 'git status --porcelain' for untracked entries and finding none."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "reason": "objective.json computes a typecheck_pass check but no expectation references it, even though the change touches src/format.ts. tests_pass would likely also catch a syntax error, but a type-level regression that doesn't break the runtime tests could slip through undetected by the current expectation set. Consider adding an expectation tied to objective: typecheck_pass."
+   }
+  ],
+  "overall": "The expectation set is solid and well-corroborated for this scenario: each objective-backed expectation matches independent evidence in outputs/ (diff.txt, git-status.txt, test-output.txt), and the sole transcript-only expectation (no test-writing claim) is satisfied by an explicit disclaimer in the report rather than mere silence. The one gap is a computed-but-unused objective check (typecheck_pass) that isn't tied to any expectation."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Skill": 2,
+   "Bash": 7
+  },
+  "total_tool_calls": 10,
+  "total_steps": 11,
+  "errors_encountered": 0,
+  "output_chars": 4582,
+  "transcript_chars": 11552
+ }
+}

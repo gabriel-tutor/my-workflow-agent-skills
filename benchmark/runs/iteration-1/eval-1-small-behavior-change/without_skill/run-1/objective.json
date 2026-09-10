@@ -1,0 +1,94 @@
+{
+ "scenario": "small-behavior-change",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "CONTEXT.md",
+   "src/pricing.ts",
+   "tests/pricing.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [],
+ "agent_calls": 0,
+ "edit_events": [
+  [
+   5,
+   "src/pricing.ts"
+  ],
+  [
+   5,
+   "="
+  ],
+  [
+   6,
+   "tests/pricing.test.ts"
+  ],
+  [
+   6,
+   "s"
+  ],
+  [
+   7,
+   "s"
+  ],
+  [
+   10,
+   "="
+  ],
+  [
+   10,
+   "$SCRATCH/pricing.ts.bak"
+  ],
+  [
+   10,
+   "src/pricing.ts"
+  ],
+  [
+   10,
+   "s"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {
+  "AC1 SAVE10 subtracts 10% of the post-tier total": "passed",
+  "AC2 FLAT5 subtracts 500 when the subtotal is at least 2000": "passed",
+  "AC4 an unknown code throws": "passed"
+ },
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "benchmark/runs/iteration-1/eval-1-small-behavior-change/without_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-1-small-behavior-change/without_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  23 passed (23)\n   Start at  04:35:51\n   Duration  105ms (transform 68%, import 16%, tests 9%, worker 7%, environment 1%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  },
+  "test_edited_before_pricing": {
+   "passed": false,
+   "evidence": "first test-file edit at event 6; first src/pricing.ts edit at event 5"
+  },
+  "single_tdd_driver": {
+   "passed": true,
+   "evidence": "TDD driver skills invoked: none"
+  },
+  "flat5_has_test": {
+   "passed": true,
+   "evidence": "tests mentioning FLAT5: ['tests/pricing.test.ts']"
+  },
+  "hidden_acceptance_all_pass": {
+   "passed": true,
+   "evidence": "{\"AC1 SAVE10 subtracts 10% of the post-tier total\": \"passed\", \"AC2 FLAT5 subtracts 500 when the subtotal is at least 2000\": \"passed\", \"AC4 an unknown code throws\": \"passed\"}"
+  }
+ }
+}

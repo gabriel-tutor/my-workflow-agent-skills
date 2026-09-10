@@ -1,0 +1,107 @@
+{
+ "scenario": "small-behavior-change",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "CONTEXT.md",
+   "src/pricing.ts",
+   "tests/pricing.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-superpowers-workflow"
+  ],
+  [
+   6,
+   "superpowers:using-superpowers"
+  ],
+  [
+   8,
+   "superpowers:brainstorming"
+  ],
+  [
+   10,
+   "superpowers:test-driven-development"
+  ],
+  [
+   17,
+   "superpowers:requesting-code-review"
+  ],
+  [
+   24,
+   "superpowers:verification-before-completion"
+  ]
+ ],
+ "agent_calls": 2,
+ "edit_events": [
+  [
+   11,
+   "tests/pricing.test.ts"
+  ],
+  [
+   11,
+   "s"
+  ],
+  [
+   12,
+   "src/pricing.ts"
+  ],
+  [
+   14,
+   "="
+  ],
+  [
+   70,
+   "s"
+  ],
+  [
+   70,
+   "src/pricing.ts"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {
+  "AC1 SAVE10 subtracts 10% of the post-tier total": "passed",
+  "AC2 FLAT5 subtracts 500 when the subtotal is at least 2000": "passed",
+  "AC4 an unknown code throws": "passed"
+ },
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "/Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-1-small-behavior-change/new_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-1-small-behavior-change/new_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  22 passed (22)\n   Start at  05:02:20\n   Duration  126ms (transform 70%, import 17%, tests 7%, worker 5%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  },
+  "test_edited_before_pricing": {
+   "passed": true,
+   "evidence": "first test-file edit at event 11; first src/pricing.ts edit at event 12"
+  },
+  "single_tdd_driver": {
+   "passed": true,
+   "evidence": "TDD driver skills invoked: ['superpowers:test-driven-development']"
+  },
+  "flat5_has_test": {
+   "passed": true,
+   "evidence": "tests mentioning FLAT5: ['tests/pricing.test.ts']"
+  },
+  "hidden_acceptance_all_pass": {
+   "passed": true,
+   "evidence": "{\"AC1 SAVE10 subtracts 10% of the post-tier total\": \"passed\", \"AC2 FLAT5 subtracts 500 when the subtotal is at least 2000\": \"passed\", \"AC4 an unknown code throws\": \"passed\"}"
+  }
+ }
+}

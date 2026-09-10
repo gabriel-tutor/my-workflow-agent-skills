@@ -1,0 +1,113 @@
+{
+ "expectations": [
+  {
+   "text": "No design interview skill was invoked: no superpowers:brainstorming, grill-me, grill-with-docs, or grilling (objective: no_design_interview_skill)",
+   "passed": true,
+   "evidence": "objective.json check no_design_interview_skill passed, evidence 'interview skills invoked: none'; skills_invoked contains no brainstorming/grill skill. Transcript line ~185 shows the agent explicitly deciding not to invoke superpowers:brainstorming or an MP interview, citing its routing policy ('Design: spec already approved -> reuse it. Not invoking superpowers:brainstorming or any MP interview (policy Section 5B \"reuse a design already supplied\", conflict rule 11 \"never re-ask a settled point\")'), and the final REPORT.md repeats this ('design reused from the approved spec (no SP/brainstorming, no MP interview)')."
+  },
+  {
+   "text": "Tests and typecheck pass (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json: tests_pass passed with evidence 'Test Files 5 passed (5) / Tests 21 passed (21)'; typecheck_pass passed. outputs/test-output.txt confirms 5 files / 21 tests passed; outputs/typecheck-output.txt is empty (clean tsc --noEmit, no diagnostics). Transcript step [36] (superpowers:verification-before-completion) shows a fresh post-refactor run: 'npm test exit=0' and 'typecheck exit=0'."
+  },
+  {
+   "text": "All eight hidden acceptance tests pass, i.e. every criterion in docs/spec-coupons.md is implemented (objective: hidden_acceptance_all_pass; list any failing AC)",
+   "passed": true,
+   "evidence": "objective.json hidden_acceptance_all_pass passed; all 8 hidden checks report 'passed' with none failing: AC1 (SAVE10 10% of post-tier total), AC2 (FLAT5 -500 when subtotal >= 2000), AC3 (FLAT5 below threshold throws), AC3m (message says not applicable), AC4 (unknown code throws), AC4m (message says unknown coupon), AC5 (case-insensitive), AC6 (stacking after tier discount). No failing AC. Independently re-derived the arithmetic against src/pricing.ts in outputs/diff.txt against docs/spec-coupons.md: 25 units @ 100c -> subtotal 2500 -> tier 5% -> 2375 -> SAVE10 -> 2137 (matches spec's own worked example exactly); 20 units @ 100c -> subtotal 2000 qualifies FLAT5 even though the tier-discounted total is 1900 -> 1400; case folding via .toUpperCase(); unknown/inapplicable codes throw with the required substrings."
+  },
+  {
+   "text": "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+   "passed": true,
+   "evidence": "objective.json coupon_tests_exist passed: tests exercising applyCoupon = ['tests/pricing.test.ts']. Read the actual test code in outputs/diff.txt: the new describe(\"coupons\") block only calls applyCoupon and totalCents (both exported from src/pricing.ts) plus the pre-existing cartWithUnits helper (itself built from createCart/addLine) -- no internal helper such as subtotalCents or tierDiscountPercent is exercised by any new test. This matches docs/spec-coupons.md's Test seam section verbatim: 'Tests exercise applyCoupon through the public module interface with carts built via createCart / addLine. No internal helpers are tested directly.'"
+  },
+  {
+   "text": "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+   "passed": true,
+   "evidence": "objective.json single_execution_mode passed, evidence 'execution-mode skills invoked: none (direct)'. Full Skill-tool call list in the transcript is: [1] superpowers:using-superpowers, [12] superpowers:test-driven-development, [29] superpowers:requesting-code-review, [33] superpowers:receiving-code-review, [35] superpowers:verification-before-completion, [38] superpowers:finishing-a-development-branch -- no Matt Pocock 'implement' skill and no Superpowers execution-orchestration skill (e.g. executing-plans, subagent-driven-development) appear at all, so there is no conflict between two execution modes. The agent explicitly named superpowers:test-driven-development the sole 'cycle owner' and only consulted MP's tdd/tests.md and tdd/SKILL.md as reference material via Bash/Read (not invoked as a competing Skill): 'Execution: inline TDD owned by superpowers:test-driven-development, MP tdd/tests.md consulted for assertion quality; then one independent reviewer subagent with SP + MP criteria.'"
+  },
+  {
+   "text": "The report maps the spec's acceptance criteria to verification evidence rather than restating the spec",
+   "passed": true,
+   "evidence": "outputs/REPORT.md's 'What I verified' section ties each acceptance criterion to a named test plus its exact RED error and GREEN result: AC4/unknown-code -> 'rejects an unknown code' (RED 'applyCoupon is not a function' -> GREEN 5/5); AC1/AC6 -> 'SAVE10 subtracts 10% ...' citing both the plain case (1000->900) and the spec's own stacking numbers (2375->2137); AC2 -> 'FLAT5 subtracts 500 cents when the pre-tier subtotal reaches 2000'; AC3/AC3m -> 'FLAT5 is rejected when the subtotal is below 2000'; AC5 -> 'matches codes case-insensitively'; the interface's 'totalCents unchanged' clause -> the dedicated preservation test. It also cites exact commands and outputs (npm test, npm run typecheck, git status --porcelain, git diff --stat 8576864) and the independent reviewer's per-axis (Spec/Standards) verdict and disposed Minor findings, rather than paraphrasing docs/spec-coupons.md. Caveat (see claims): the report's line 'Requirements checklist: ... (table in the message above)' points at a table that does not actually exist anywhere in REPORT.md or the transcript -- a minor dangling cross-reference that doesn't undermine the AC-to-evidence mapping shown elsewhere in prose."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "npm test: 5 files, 21/21 tests passed, exit 0",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt: 'Test Files 5 passed (5)' / 'Tests 21 passed (21)'; transcript step [36] shows 'npm test exit=0' on a fresh post-refactor run; objective.json tests_pass evidence matches."
+  },
+  {
+   "claim": "npm run typecheck passes cleanly (tsc --noEmit, exit 0)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/typecheck-output.txt is empty; transcript step [36] shows 'typecheck exit=0'; objective.json typecheck_pass passed."
+  },
+  {
+   "claim": "Each new coupon test was watched failing (RED) for the reason stated before being made to pass (GREEN), except the cart/totalCents preservation test which the agent states passed on the first run by design rather than being red-driven",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript steps [15],[17],[19],[21],[23] show the exact RED failures the report later cites: 'applyCoupon is not a function', 'Error: unknown coupon: SAVE10', 'Error: unknown coupon: FLAT5', 'expected function to throw an error, but it didn't', 'Error: unknown coupon: save10' -- each followed by a GREEN run (5/5, 6/6, 7/7, 8/8, 9/9) after the matching src/pricing.ts edit at steps [16],[18],[20],[22],[24]."
+  },
+  {
+   "claim": "One independent reviewer subagent (general-purpose, Sonnet, read-only) reviewed the real working-tree diff and returned verdict 'Ready to merge: Yes' with 0 Critical / 0 Important / 3 Minor issues, all dispositioned with no code change",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript [31] shows a first Agent dispatch attempt erroring ('Teammates cannot spawn other teammates -- the team roster is flat. To spawn a subagent instead, omit the name parameter'); it was retried at [32] without the name param and succeeded, returning review findings ('All 6 ACs are correctly implemented and each is covered by a test that discriminates real mutations...'). REPORT.md enumerates exactly three Minor findings with a stated disposition for each, consistent with the claimed 0/0/3 count. The initial failed dispatch attempt is not mentioned in REPORT.md, but it was a self-corrected tooling hiccup that didn't change the substance of the review that did happen."
+  },
+  {
+   "claim": "Requirements checklist: AC1-AC6, the interface clause, the test-seam clause and the out-of-scope list each map to a specific test or diff hunk (table in the message above)",
+   "type": "factual",
+   "verified": false,
+   "evidence": "No markdown table (no '|' characters at all) appears anywhere in outputs/REPORT.md, and the transcript's compressed tool-call log doesn't show one either. The mapping this sentence describes is genuinely present, just as prose elsewhere in the same report rather than as a table -- so the underlying substance checks out even though this specific self-reference to 'the message above' does not point at anything retrievable in the artifacts."
+  },
+  {
+   "claim": "No worktree was created because the run directory is already an isolated repo",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript step [39]'s git-common-dir probe prints 'normal repo (no worktree)' with GIT_DIR/GIT_COMMON both pointing at the workspace's own .git; no EnterWorktree/ExitWorktree tool call appears anywhere in the transcript."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": [],
+  "note": "No outputs/user_notes.md file exists for this run; nothing to summarize."
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+    "reason": "The objective check's evidence string only distinguishes 'both invoked' from 'not both'; a run that skipped process skills entirely (invoking neither collection's TDD/execution skill and just editing code ad hoc) would also report 'none (direct)' and pass, even though that would arguably be a worse outcome than this run's deliberate single-owner routing. Here the transcript shows genuine, reasoned single-ownership (SP test-driven-development as sole cycle owner, MP tdd docs consulted only as reference), so the pass is well-earned, but the objective signal alone can't tell that apart from 'no disciplined loop ran at all' -- the transcript is doing the real discriminating work, as the brief anticipates."
+   },
+   {
+    "reason": "outputs/REPORT.md contains a dangling self-reference -- 'Requirements checklist: ... (table in the message above)' -- but no such table exists anywhere in the report or transcript. It didn't change the verdict on the report-quality expectation because the AC-to-evidence mapping is otherwise present in prose, but no current assertion would catch a report that points to supporting evidence that isn't actually there. Worth a discriminating check for this class of internal-consistency slip in future report-quality grading."
+   },
+   {
+    "assertion": "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+    "reason": "objective.json's coupon_tests_exist evidence is just the test filename that imports applyCoupon, which would equally pass for a near-empty smoke test. The brief already compensates for this by directing the grader to read the tests, and in this run they're genuinely substantive (six behavioral tests covering every AC plus the exact test-seam constraint), but flagging that the raw objective signal by itself is not discriminating."
+   }
+  ],
+  "overall": "Evals look solid overall: the hidden acceptance tests run real code against real behavior rather than checking surface signals, and the process assertions (no design interview, single execution mode) have clear, unambiguous transcript evidence in this run. Two minor, non-blocking gaps: single_execution_mode's objective evidence can't distinguish a disciplined single owner from no process skill at all, and no assertion would catch the report's dangling 'table in the message above' cross-reference to content that isn't actually present."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Skill": 6,
+   "Bash": 31,
+   "Agent": 2
+  },
+  "total_tool_calls": 40,
+  "total_steps": 41,
+  "errors_encountered": 1,
+  "output_chars": 9354,
+  "transcript_chars": 32472
+ }
+}

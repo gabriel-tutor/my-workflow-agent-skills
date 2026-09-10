@@ -1,0 +1,105 @@
+{
+ "expectations": [
+  {
+   "text": "A test exercising concurrent reserve() calls (Promise.all or equivalent) was added (objective: concurrent_test_added)",
+   "passed": true,
+   "evidence": "objective.json concurrent_test_added: passed=true, evidence 'tests with concurrent reserve(): [tests/inventory.test.ts]'. Confirmed in outputs/diff.txt: tests/inventory.test.ts gained four new `it` blocks using `Promise.all([inv.reserve(...), inv.reserve(...)])` and `Promise.all(Array.from({ length: 20 }, () => inv.reserve('A', 1)))`, and tests/orders.test.ts gained `Promise.all([checkout(cart, inv), checkout(cart, inv)])`."
+  },
+  {
+   "text": "That test was written before src/inventory.ts was edited (objective: test_edited_before_inventory)",
+   "passed": false,
+   "evidence": "objective.json test_edited_before_inventory: passed=false, 'first test-file edit at event 10; first src/inventory.ts edit at event 6'. Transcript confirms: step [6] rewrites src/inventory.ts with the queue-based fix; the tracked test file tests/inventory.test.ts is first edited at step [10], after the fix. The agent did write an ad hoc repro script in the scratchpad (step [5], outside the workspace, run at steps [7]-[9]) before the fix, and later confirmed via `git stash` (step [11]) that the formal tests also fail on baseline, but the tracked regression test itself was added after src/inventory.ts was already edited, so this expectation fails on its literal terms."
+  },
+  {
+   "text": "The new test fails on the baseline inventory.ts and passes after the fix (objective: new_test_fails_on_baseline, tests_pass)",
+   "passed": true,
+   "evidence": "objective.json new_test_fails_on_baseline: passed=true (baseline run exits 1 on the mixed-quantity assertion `expect(reserved).toBeLessThanOrEqual(3)`); tests_pass: passed=true. Transcript step [11] stashes the fix to restore baseline src/inventory.ts and reports (per REPORT.md 'What I verified') 4 failed / 16 passed with failures including 'expected [ true, true ] to have a length of 1 but got 2' and 'expected [ true, true, ... ] to have a length of 5 but got 20'. Step [12] then runs the fixed code 10 consecutive times, each showing 'Tests 20 passed (20)', and outputs/test-output.txt confirms 'Test Files 5 passed (5)' / 'Tests 20 passed (20)'."
+  },
+  {
+   "text": "A diagnosis skill (superpowers:systematic-debugging or diagnosing-bugs) was invoked before the first edit to src/inventory.ts (objective: diagnosis_skill_before_inventory_edit)",
+   "passed": false,
+   "evidence": "objective.json: skills_invoked=[] (empty), diagnosis_skill_before_inventory_edit: passed=false, 'diagnosis skill at event None'. This run is the without_skill condition; the transcript contains only Bash tool calls (steps [0]-[13]) and no Skill invocations at any point, before or after the src/inventory.ts edit at step [6]."
+  },
+  {
+   "text": "The original single-reserve tests still pass and typecheck is clean (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json tests_pass: passed=true, typecheck_pass: passed=true (evidence empty string = clean `tsc --noEmit` output). outputs/diff.txt shows tests/inventory.test.ts and tests/orders.test.ts only have new `it` blocks appended after the original ones (no deletions/edits to the original assertions), and the test count rose from 15 (baseline, transcript step [4]) to 20 (transcript step [12] and outputs/test-output.txt), i.e. all original tests plus the 5 new ones pass. Step [12]'s 10x loop shows 'Tests 20 passed (20)' every run and 'exit=0' for typecheck."
+  },
+  {
+   "text": "The report distinguishes what was verified from remaining risk (for example multi-process or cross-SKU cases) instead of over-claiming",
+   "passed": true,
+   "evidence": "outputs/REPORT.md has a dedicated 'What I verified' section (baseline run, scratchpad repro before/after fix, baseline-stash regression run, 10x fixed run, typecheck) and a separate 'What remains / could not be verified' section that explicitly flags: (1) the queue's failed-task-release path is untested because `simulateIo` isn't injectable, (2) 'different SKUs don't block each other' is asserted only by code reasoning, not a test, and (3) an adjacent out-of-scope leak in src/orders.ts (multi-line checkout doesn't release earlier reservations when a later line fails) that it did not fix. I independently read workspace/src/orders.ts and confirmed claim (3) is accurate: `checkout` reserves lines sequentially in a for-loop and returns immediately on failure with no release/rollback call, and Inventory exposes no release method, so the leak claim is a real, correctly-diagnosed gap rather than an over-claim."
+  }
+ ],
+ "summary": {
+  "passed": 4,
+  "failed": 2,
+  "total": 6,
+  "pass_rate": 0.6667
+ },
+ "claims": [
+  {
+   "claim": "On baseline inventory.ts, 20 concurrent reserve() calls against a stock of 5 all resolved true (not just an off-by-one)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "REPORT.md 'What I verified' quotes the baseline-stash failure 'expected [ true, true, ... ] to have a length of 5 but got 20', i.e. 20 of 20 baseline reservations succeeded against stock 5."
+  },
+  {
+   "claim": "Against the fix, the same repro (two reserves racing for the last unit) yields [true, false] and one order plus one out-of-stock result",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript step [9] (run after the fix was applied at step [6]) shows 'reserve results: [ true, false ]' and checkout results with one ok:true and (per REPORT.md) one out-of-stock, matching the claim."
+  },
+  {
+   "claim": "The queue's failed-task-release behavior is not covered by any test",
+   "type": "quality",
+   "verified": true,
+   "evidence": "outputs/diff.txt's four new inventory tests and one new orders test never make `simulateIo` reject; none exercises the `run.then(noop, noop)` failure path, matching the report's own disclosure."
+  },
+  {
+   "claim": "Different SKUs don't block each other is not asserted by any test",
+   "type": "quality",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows every new concurrency test uses a single SKU ('A'); no test reserves two different SKUs concurrently to check independence."
+  },
+  {
+   "claim": "checkout() in src/orders.ts leaks stock: a multi-line cart that fails on a later line does not release the stock reserved by earlier lines",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Read workspace/src/orders.ts directly: `checkout` loops `for (const line of cart.lines)`, calls `await inventory.reserve(line.sku, line.qty)`, and on failure does `return { ok: false, ... }` immediately with no release/refund call; Inventory (per transcript step [2]) has no release method, so an earlier successful reservation in the same cart is never given back."
+  },
+  {
+   "claim": "The fix keeps the public API and existing behavior unchanged",
+   "type": "quality",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows `reserve(sku: string, qty: number): Promise<boolean>` keeps its signature (only the `async` keyword is replaced by an explicit `serialized(...)` wrapper returning the same Promise<boolean>), and all pre-existing test assertions are left untouched, with all 20 tests (15 original + 5 new) passing."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "That test was written before src/inventory.ts was edited (objective: test_edited_before_inventory)",
+    "reason": "This run shows a legitimate alternative workflow that the check can't distinguish from a lazier one: the agent reproduced the bug with an ad hoc scratchpad script before touching src/inventory.ts (steps [5],[7]-[9]), fixed the code, then wrote the formal regression test and separately proved via `git stash` that it fails on baseline (step [11], objective: new_test_fails_on_baseline). That stash-based proof is arguably stronger evidence the test is genuine than file-edit order alone, but this expectation only inspects raw edit-event ordering of tracked files and fails any run that formalizes its test after an out-of-band repro, even when new_test_fails_on_baseline independently confirms the same property. Consider either treating a later, explicit baseline-verification as an alternate way to satisfy the intent, or documenting that this expectation specifically measures in-repo TDD ordering (not just 'is the test genuine'), since expectation 3 already covers the substantive claim."
+   },
+   {
+    "reason": "No expectation checks whether the fix's per-SKU `queues` map actually avoids unbounded growth or genuinely leaves unrelated SKUs non-blocking \u2014 both are claimed in the report ('cleans up its map entry when a SKU goes idle', 'different SKUs don't block each other') but, by the report's own admission, neither is exercised by a test. This is exactly the kind of important-but-uncovered outcome worth an assertion (e.g. reserving many distinct SKUs shouldn't leave stale queue entries; two different SKUs should be able to interleave/complete out of submission order)."
+   }
+  ],
+  "overall": "Expectations 1, 3, 5, and 6 are solid and each is backed by real evidence in this run, not just surface compliance. Expectation 4 correctly reflects that this is the without_skill condition (no skill invoked at all). Expectation 2's strict edit-order check penalizes a rigorous repro-first-then-formalize-then-verify-on-baseline workflow that expectation 3 already validates more directly \u2014 worth reconsidering whether both are needed in their current form."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Bash": 14
+  },
+  "total_tool_calls": 14,
+  "total_steps": 15,
+  "errors_encountered": 0,
+  "output_chars": 5836,
+  "transcript_chars": 16100
+ }
+}

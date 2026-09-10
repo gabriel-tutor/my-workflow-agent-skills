@@ -1,0 +1,3 @@
+ M src/inventory.ts
+ M tests/inventory.test.ts
+ M tests/orders.test.ts

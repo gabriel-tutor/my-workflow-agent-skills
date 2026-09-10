@@ -1,0 +1,108 @@
+{
+ "expectations": [
+  {
+   "text": "A test exercising concurrent reserve() calls (Promise.all or equivalent) was added (objective: concurrent_test_added)",
+   "passed": true,
+   "evidence": "outputs/diff.txt shows two new tests added to tests/inventory.test.ts using `await Promise.all([inv.reserve(\"A\", 1), inv.reserve(\"A\", 1), inv.reserve(\"A\", 1)])` and `await Promise.all([inv.reserve(\"A\", 1), inv.reserve(\"A\", 1)])`, plus a third in tests/orders.test.ts using `await Promise.all([checkout(cart, inv), checkout(cart, inv)])`. objective.json's concurrent_test_added check is passed=true, evidence \"tests with concurrent reserve(): ['tests/inventory.test.ts']\"."
+  },
+  {
+   "text": "That test was written before src/inventory.ts was edited (objective: test_edited_before_inventory)",
+   "passed": true,
+   "evidence": "Transcript event [20] writes the regression tests into tests/inventory.test.ts and tests/orders.test.ts and runs them RED ('=== VERIFY RED ===', 2 failing shown, matches REPORT's '3 failed | 6 passed' across both files). Event [21] is the first (and only) edit to src/inventory.ts ('fix applied') and turns the suite GREEN ('Test Files 2 passed (2), Tests 9 passed (9)'). Test edit (20) clearly precedes the source edit (21). objective.json marks this check passed=true; its evidence string shows 'first src/inventory.ts edit at event None' because the python-heredoc write at event 21 wasn't filename-tagged by the instrumentation, but the transcript ordering is unambiguous."
+  },
+  {
+   "text": "The new test fails on the baseline inventory.ts and passes after the fix (objective: new_test_fails_on_baseline, tests_pass)",
+   "passed": true,
+   "evidence": "Event [20] RED run fails 'gives the last unit to exactly one of several concurrent reservations' and 'does not lose concurrent decrements when stock is sufficient for all'; objective.json's new_test_fails_on_baseline cites the matching failure at tests/inventory.test.ts:37 (`expect(inv.available(\"A\")).toBe(0)` failing against baseline, received 50 not 0). Event [21] GREEN run: 'Tests 9 passed (9)'. Final full suite in outputs/test-output.txt: 'Test Files 5 passed (5)' / 'Tests 18 passed (18)'. objective.json tests_pass=true with matching evidence."
+  },
+  {
+   "text": "A diagnosis skill (superpowers:systematic-debugging or diagnosing-bugs) was invoked before the first edit to src/inventory.ts (objective: diagnosis_skill_before_inventory_edit)",
+   "passed": true,
+   "evidence": "Transcript events [9] Skill superpowers:systematic-debugging and [10] Skill diagnosing-bugs are invoked and drive a full diagnosis (repro loop at [11]-[13], minimisation at [14], five ranked falsifiable hypotheses, H1/H5 probes at [15]-[17]) all before the first src/inventory.ts edit at event [21]. objective.json's diagnosis_skill_before_inventory_edit check is passed=true."
+  },
+  {
+   "text": "The original single-reserve tests still pass and typecheck is clean (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "outputs/diff.txt shows purely additive hunks in tests/inventory.test.ts (@@ -20,4 +20,20 @@) and tests/orders.test.ts (@@ -25,4 +25,14 @@) \u2014 no existing test lines removed or changed. Baseline was 15 passing tests (transcript event [8]); final suite is 18 passing per outputs/test-output.txt ('Test Files 5 passed (5)', 'Tests 18 passed (18)'), i.e. the original 15 plus 3 new, all green. outputs/typecheck-output.txt is empty (tsc --noEmit clean) and transcript event [25] shows 'typecheck exit=0'. objective.json: tests_pass=true, typecheck_pass=true."
+  },
+  {
+   "text": "The report distinguishes what was verified from remaining risk (for example multi-process or cross-SKU cases) instead of over-claiming",
+   "passed": true,
+   "evidence": "outputs/REPORT.md has a dedicated '## What I verified' section (9 numbered, command-level items: baseline run, repro loop, minimisation, hypothesis probes, RED, GREEN, 200x rerun, stash-based revert/restore, full diff review) clearly separated from '## What remains or could not be verified', which flags I/O-failure/rollback semantics as untestable given `simulateIo` cannot reject, names a separate pre-existing checkout defect left unfixed, states 'No independent review ran; the review above is my own', and explicitly disclaims performance claims ('no throughput/latency threshold applies to this in-memory fixture, so none is claimed'). The Assumptions section further hedges that the in-memory fix 'demonstrates the pattern the production implementation must follow... not a claim about the production database itself,' i.e. it does not over-claim beyond the single-process, evidence gathered."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "npm test passes 18/18 on the final state",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt: 'Test Files  5 passed (5)' / 'Tests  18 passed (18)'"
+  },
+  {
+   "claim": "npm run typecheck exits 0 / is clean on the final state",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/typecheck-output.txt is empty (tsc --noEmit emits nothing on success); transcript event [25] prints 'typecheck exit=0'"
+  },
+  {
+   "claim": "Regression tests fail 3/3 with the fix reverted (git stash of src/inventory.ts only) and pass again once restored",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript event [27]: 'git stash push -- s[rc/inventory.ts]' followed by '=== 2. regression tests MUST FAIL ===' showing three failing tests (the two inventory tests plus the orders.test.ts checkout test); REPORT states the subsequent stash pop restores 'npm test \u2192 Test Files 5 passed (5), Tests 18 passed (18)'"
+  },
+  {
+   "claim": "The original 2-customer scenario reproduces 0 oversells across 200 runs after the fix",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Transcript event [22]: 'RUNS=200 ... oversold(reserve)=0 oversold(checkout)=0 negativeStockRuns=0'"
+  },
+  {
+   "claim": "Net code change to fix the bug was one line moved (no new logic/branches)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows `await simulateIo();` and `this.stock.set(sku, current - qty);` simply swapped order inside reserve(); the rest of the src/inventory.ts diff is an added doc comment, not executable logic"
+  },
+  {
+   "claim": "No independent review was dispatched; the diff review was self-review only",
+   "type": "process",
+   "verified": true,
+   "evidence": "objective.json 'agent_calls': 0 (no reviewer sub-agent spawned); REPORT.md explicitly states 'No independent review ran; the review above is my own, against the real diff'"
+  }
+ ],
+ "user_notes_summary": {
+  "note": "outputs/user_notes.md is not present in outputs_dir, so there is no separate executor-flagged uncertainty file to summarize. The equivalent disclosures (I/O-failure semantics untested, a pre-existing unfixed checkout defect, no independent review, no performance claim) appear in outputs/REPORT.md's 'What remains or could not be verified' section instead.",
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "A diagnosis skill (superpowers:systematic-debugging or diagnosing-bugs) was invoked before the first edit to src/inventory.ts (objective: diagnosis_skill_before_inventory_edit)",
+    "reason": "This check is presence/timing-only (skill invoked before the edit) and would also pass for a run that invoked the skill and then jumped straight to a guessed fix without real diagnosis. It happens to be well-earned here (five ranked, falsifiable hypotheses with probes before any src/ edit), but the assertion itself doesn't distinguish that from perfunctory invocation. Consider also checking the transcript for at least one falsified/confirmed hypothesis or a minimisation step between skill invocation and the fix."
+   },
+   {
+    "reason": "objective.json's edit-detection instrumentation lost the filename for the src/inventory.ts edit (event 21 recorded as edit_events entry '=' rather than the path, and the test_edited_before_inventory / diagnosis_skill_before_inventory_edit evidence strings both say 'first src/inventory.ts edit at event None'). The checks still passed correctly by falling back to transcript reasoning, but the objective evidence string is misleading on its own and worth tightening so the automated check doesn't silently degrade when a fix is applied via an inline heredoc/script rather than a tracked Edit tool call."
+   }
+  ],
+  "overall": "Evals are well-designed: they test genuine TDD/diagnosis discipline (temporal ordering of skill use, test-first, red-then-green) rather than surface artifacts, and this run earns all six on real evidence, not coincidence. Two minor notes above (diagnosis-substance check is presence-only; objective.json's edit-event evidence string is misleading, though not outcome-affecting here)."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Skill": 5,
+   "Bash": 22
+  },
+  "total_tool_calls": 28,
+  "total_steps": 29,
+  "errors_encountered": 0,
+  "output_chars": 7906,
+  "transcript_chars": 25579
+ }
+}

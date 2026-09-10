@@ -1,0 +1,95 @@
+{
+ "scenario": "concurrency-bug",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "src/inventory.ts",
+   "tests/inventory.test.ts",
+   "tests/orders.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-workflow"
+  ],
+  [
+   7,
+   "diagnosing-bugs"
+  ],
+  [
+   14,
+   "tdd"
+  ],
+  [
+   22,
+   "code-review"
+  ]
+ ],
+ "agent_calls": 3,
+ "edit_events": [
+  [
+   9,
+   "tests/oversell.repro.test.ts"
+  ],
+  [
+   11,
+   "tests/oversell.minimise.test.ts"
+  ],
+  [
+   13,
+   "src/inventory.ts"
+  ],
+  [
+   17,
+   "src/inventory.ts"
+  ],
+  [
+   27,
+   "src/inventory.ts"
+  ],
+  [
+   28,
+   "tests/zz-throwaway-final-check.test.ts"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {},
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "/Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/old_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "concurrent_test_added": {
+   "passed": true,
+   "evidence": "tests with concurrent reserve(): ['tests/inventory.test.ts']"
+  },
+  "test_edited_before_inventory": {
+   "passed": true,
+   "evidence": "first test-file edit at event 9; first src/inventory.ts edit at event 13"
+  },
+  "diagnosis_skill_before_inventory_edit": {
+   "passed": true,
+   "evidence": "diagnosis skill at event 7; first src/inventory.ts edit at event 13; skills: ['matt-pocock-workflow', 'diagnosing-bugs', 'tdd', 'code-review']"
+  },
+  "new_test_fails_on_baseline": {
+   "passed": true,
+   "evidence": "exit 1 with baseline src/inventory.ts: \u2026nst results = await Promise.all([inv.reserve(\"A\", 1), inv.reserv\u2026\n     28|     expect(results.filter((reserved) => reserved)).toHaveLength(1);\n       |                                                    ^\n     29|     expect(inv.available(\"A\")).toBe(0);\n     30|   });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/old_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  17 passed (17)\n   Start at  04:48:25\n   Duration  128ms (transform 68%, import 18%, tests 7%, worker 7%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  }
+ }
+}

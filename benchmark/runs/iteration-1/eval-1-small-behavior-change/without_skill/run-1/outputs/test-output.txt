@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-1-small-behavior-change/without_skill/run-1/workspace
+
+
+ Test Files  5 passed (5)
+      Tests  23 passed (23)
+   Start at  04:35:51
+   Duration  105ms (transform 68%, import 16%, tests 9%, worker 7%, environment 1%)
+

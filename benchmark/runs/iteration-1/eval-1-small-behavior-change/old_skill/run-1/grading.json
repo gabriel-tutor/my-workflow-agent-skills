@@ -1,0 +1,109 @@
+{
+ "expectations": [
+  {
+   "text": "Tests and typecheck pass on the final workspace (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json: tests_pass=true (\"Test Files 5 passed (5)\\nTests 22 passed (22)\"), typecheck_pass=true. Confirmed independently in outputs/test-output.txt (same 5 files / 22 tests passed) and in the transcript at step [35] ('=== typecheck ===' / 'typecheck exit=0'), with outputs/typecheck-output.txt empty (0 bytes), consistent with a clean `tsc --noEmit`."
+  },
+  {
+   "text": "A test file was written or edited before src/pricing.ts was first edited (objective: test_edited_before_pricing)",
+   "passed": true,
+   "evidence": "objective.json test_edited_before_pricing=true: 'first test-file edit at event 11; first src/pricing.ts edit at event 12'. Transcript confirms genuine test-first order, not just file-touch order: step [11] edits tests/pricing.test.ts to add a SAVE10 assertion and runs RED ('TypeError: applyCoupon is not a function'); step [12] then appends the implementation to src/pricing.ts and reruns GREEN (5 passed)."
+  },
+  {
+   "text": "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+   "passed": true,
+   "evidence": "objective.json skills_invoked = [[0,'matt-pocock-workflow'],[9,'tdd'],[23,'domain-modeling'],[27,'code-review']] and single_tdd_driver=true ('TDD driver skills invoked: [\"tdd\"]'). Only Matt Pocock's `tdd` skill was ever invoked (transcript step [9]/[10], reading tests.md and mocking.md from ~/.claude/skills/tdd); `superpowers:test-driven-development` does not appear anywhere in the transcript, so there is no second driver even as a reference."
+  },
+  {
+   "text": "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+   "passed": true,
+   "evidence": "outputs/diff.txt tests/pricing.test.ts adds both 'FLAT5 takes $5 off when the subtotal is at least $20' (`applyCoupon(cartWithUnits(1, 2000), \"FLAT5\")` \u2192 1500, the boundary) and 'FLAT5 leaves the total unchanged when the subtotal is under $20' (`applyCoupon(cartWithUnits(1, 1999), \"FLAT5\")` \u2192 1999, the below-threshold case). Transcript steps [17]-[19] show the below-threshold test driven red ('expected 1499 to be 1999') then green via a real TDD slice, not a trivial or coincidental assertion."
+  },
+  {
+   "text": "The hidden acceptance tests AC1, AC2 and AC4 pass against the implementation (objective: hidden_acceptance_all_pass; AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt)",
+   "passed": true,
+   "evidence": "objective.json hidden_tests: AC1 'passed', AC2 'passed', AC4 'passed'; hidden_acceptance_all_pass=true. The implementation in outputs/diff.txt is consistent with all three: `case \"SAVE10\": return total - percentOfCents(total, 10)` on `total = totalCents(cart)` (post-tier, AC1); `case \"FLAT5\": return subtotalCents(cart) >= FLAT5_MIN_SUBTOTAL_CENTS ? total - 500 : total` with `FLAT5_MIN_SUBTOTAL_CENTS = 2000` (AC2); `default: throw new Error(\\`unknown coupon code ${code}\\`)` (AC4)."
+  },
+  {
+   "text": "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user",
+   "passed": false,
+   "evidence": "outputs/REPORT.md '## Assumptions' states stacking once with real reasoning (#1: 'Coupons act on the total after the tier discount ... so SAVE10 compounds with the tier discount ... The Spec reviewer agreed this is the better-grounded reading') and case handling once (#4: 'Codes are exact-match and case-sensitive (\"save10\" is an unknown code). No normalisation was added.'). No question is ever put to the user anywhere in the transcript. But rounding is never disclosed as an assumption: none of the 6 numbered items mention the SAVE10 rounding rule. It only appears as an implementation fact elsewhere \u2014 'What changed': 'SAVE10 subtracts 10% (rounded with `Math.round`)'; the test list description 'SAVE10 rounding (1005\u2192904)'; and a mutation-test note in 'What was verified'. Fractional-cent rounding (10% of 1005 = 100.5) is a genuine judgment call with the same money-changing shape as the stacking and case-sensitivity calls that were flagged, but it is never framed as a decision the user could revisit. 2 of the 3 required assumption categories are disclosed; rounding is not."
+  }
+ ],
+ "summary": {
+  "passed": 5,
+  "failed": 1,
+  "total": 6,
+  "pass_rate": 0.8333
+ },
+ "claims": [
+  {
+   "claim": "npm test passes 22/22 across 5 files on the final workspace",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt: 'Test Files 5 passed (5)' / 'Tests 22 passed (22)', matching objective.json's tests_pass evidence and transcript step [35]."
+  },
+  {
+   "claim": "npm run typecheck is clean (exit 0) on the final workspace",
+   "type": "process",
+   "verified": true,
+   "evidence": "outputs/typecheck-output.txt is empty (0 bytes), consistent with a silent successful `tsc --noEmit`; transcript step [34]-[35] explicitly echoes 'typecheck exit=0'."
+  },
+  {
+   "claim": "3 mutation checks (coupon base = subtotal instead of tier-discounted total; FLAT5 threshold reading the discounted total; Math.round\u2192Math.floor) were each caught by the intended test, and src/pricing.ts was restored byte-identical afterward",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript steps [20]-[21]: mutation A \u2192 2 failures ('expected 4500 to be 4050', 'expected 1500 to be 1400'); mutation B \u2192 1 failure ('expected 1900 to be 1400'); mutation C \u2192 1 failure ('expected 905 to be 904'); step [21] logs '=== RESTORED, identical ===' followed by 11/11 passing."
+  },
+  {
+   "claim": "The review sub-agents' first launch failed because teammates cannot spawn other teammates, and a relaunch without the `name` parameter succeeded, still running Standards and Spec review in parallel",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript steps [29]-[30]: 'Agent result (error): Teammates cannot spawn other teammates \u2014 the team roster is flat. To spawn a subagent instead, omit the `name` parameter.' Steps [31]-[32] then show both the Standards and the Spec agent results returned together from a single relaunch."
+  },
+  {
+   "claim": "applyCoupon is the only new money-returning function that doesn't follow the file's `Cents`-suffix naming convention (e.g. totalCents, subtotalCents)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt and the transcript's earlier read of src/pricing.ts show `totalCents` defined locally and `subtotalCents` imported from ./cart, while `tierDiscountPercent` and `totalUnits` are not money-valued. The new `applyCoupon` export returns cents but is not named `applyCouponCents`, matching REPORT.md assumption #5."
+  },
+  {
+   "claim": "The code-review skill's Standards sub-agent found 0 hard violations and the Spec sub-agent found 0 missing/partial requirements, independently re-confirming 22/22 tests and a clean typecheck",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Transcript step [32] (agent results, captured as truncated ~3.2KB/2.9KB previews): Standards \u2014 '### (a) Documented standards \u2014 no hard violations found'; Spec \u2014 'Verification: `npm test` \u2192 22/22 pass; `npm run typecheck` clean ... (a) Missing or partial requirements \u2014 none. Every concrete ask is present'. The full sub-agent rationale (e.g. the '3 judgement-call smells' cited in the executor's own summary line) is not fully visible in the truncated transcript capture, so that specific count is not independently verifiable, though the visible portions are consistent."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user",
+    "reason": "This bundles three independent disclosure requirements into a single pass/fail expectation. This run disclosed 2 of 3 (stacking, case handling) with real reasoning, but omitted rounding \u2014 a judgment call of the same money-changing shape (10% of an odd cent amount like 1005 is fractional). Because there's no partial credit, one omission fails the whole expectation. Splitting this into three separate expectations (stacking, rounding, case handling) would score partial disclosure precisely instead of all-or-nothing."
+   },
+   {
+    "assertion": "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+    "reason": "The automated flat5_has_test check only greps for a test file that mentions the string 'FLAT5'; it would pass equally for a test that only covers the at-or-above-$20 case, or one with 'FLAT5' in a comment but no real below-threshold assertion. This run's test is genuinely substantive, but the automated check itself isn't what discriminates that \u2014 the brief's own 'then read the test' instruction is doing the real verification work."
+   }
+  ],
+  "overall": "5 of 6 expectations hold with strong, specific evidence: test-first ordering, a single TDD driver, real FLAT5 tests at and below the $20 boundary, all three graded hidden acceptance tests passing, and an implementation that survived targeted mutation testing. The one failure is a genuine gap rather than a technicality: the report thoroughly discloses the stacking and case-sensitivity judgment calls (with reasoning and reviewer sign-off) but never flags the SAVE10 rounding rule as a decision the user could revisit, despite it having the same monetary-ambiguity shape as the two calls that were disclosed."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Bash": 29,
+   "Skill": 3,
+   "Agent": 4
+  },
+  "total_tool_calls": 37,
+  "total_steps": 36,
+  "errors_encountered": 2,
+  "output_chars": 7036,
+  "transcript_chars": 27928
+ }
+}

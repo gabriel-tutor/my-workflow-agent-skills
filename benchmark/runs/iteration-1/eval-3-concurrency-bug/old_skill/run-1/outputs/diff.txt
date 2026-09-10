@@ -1,0 +1,94 @@
+diff --git a/src/inventory.ts b/src/inventory.ts
+index adc4853..f3fba55 100644
+--- a/src/inventory.ts
++++ b/src/inventory.ts
+@@ -1,9 +1,17 @@
+ /**
+  * In-memory stock ledger. `reserve` is async because production hits a database;
+  * the simulated I/O gap models that round trip.
++ *
++ * Reservations for the same SKU are serialised: one reservation's check → I/O →
++ * decrement finishes before the next one starts, so two callers can never both
++ * see the last unit and over-sell it. Production gets the same guarantee from a
++ * row lock (`SELECT ... FOR UPDATE`) held across the round trip. `setStock` is a
++ * setup call and is not serialised with reservations.
+  */
+ export class Inventory {
+   private stock = new Map<string, number>();
++  /** Tail of each SKU's lock queue; the entry is dropped once the queue drains. */
++  private locks = new Map<string, Promise<void>>();
+ 
+   setStock(sku: string, qty: number): void {
+     this.stock.set(sku, qty);
+@@ -14,12 +22,29 @@ export class Inventory {
+   }
+ 
+   /** Holds `qty` units of `sku` for a checkout. Resolves false when stock is insufficient. */
+-  async reserve(sku: string, qty: number): Promise<boolean> {
+-    const current = this.available(sku);
+-    if (current < qty) return false;
+-    await simulateIo();
+-    this.stock.set(sku, current - qty);
+-    return true;
++  reserve(sku: string, qty: number): Promise<boolean> {
++    return this.withSkuLock(sku, async () => {
++      const current = this.available(sku);
++      if (current < qty) return false;
++      await simulateIo();
++      this.stock.set(sku, current - qty);
++      return true;
++    });
++  }
++
++  /** Runs `task` once every earlier task for `sku` has released, and holds `sku` until it settles. */
++  private withSkuLock<T>(sku: string, task: () => Promise<T>): Promise<T> {
++    const previous = this.locks.get(sku) ?? Promise.resolve();
++    let release!: () => void;
++    const held = new Promise<void>((resolve) => {
++      release = resolve;
++    });
++    const tail = previous.then(() => held);
++    this.locks.set(sku, tail);
++    tail.then(() => {
++      if (this.locks.get(sku) === tail) this.locks.delete(sku);
++    });
++    return previous.then(task).finally(release);
+   }
+ }
+ 
+diff --git a/tests/inventory.test.ts b/tests/inventory.test.ts
+index 8da98a2..a7d9b42 100644
+--- a/tests/inventory.test.ts
++++ b/tests/inventory.test.ts
+@@ -20,4 +20,12 @@ describe("inventory", () => {
+     const inv = new Inventory();
+     await expect(inv.reserve("ZZZ", 1)).resolves.toBe(false);
+   });
++
++  it("does not over-sell when two reservations compete for the last unit", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const results = await Promise.all([inv.reserve("A", 1), inv.reserve("A", 1)]);
++    expect(results.filter((reserved) => reserved)).toHaveLength(1);
++    expect(inv.available("A")).toBe(0);
++  });
+ });
+diff --git a/tests/orders.test.ts b/tests/orders.test.ts
+index 9b53dc1..5f03fd4 100644
+--- a/tests/orders.test.ts
++++ b/tests/orders.test.ts
+@@ -25,4 +25,14 @@ describe("checkout", () => {
+     const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 });
+     expect(await checkout(cart, inv)).toEqual({ ok: false, reason: "out-of-stock", sku: "A" });
+   });
++
++  it("gives the last unit to only one of two simultaneous checkouts", async () => {
++    const inv = new Inventory();
++    inv.setStock("A", 1);
++    const cart = addLine(createCart(), { sku: "A", name: "Apple", unitPriceCents: 150, qty: 1 });
++    const results = await Promise.all([checkout(cart, inv), checkout(cart, inv)]);
++    expect(results.filter((r) => r.ok)).toHaveLength(1);
++    expect(results.filter((r) => !r.ok)).toEqual([{ ok: false, reason: "out-of-stock", sku: "A" }]);
++    expect(inv.available("A")).toBe(0);
++  });
+ });

@@ -1,0 +1,118 @@
+{
+ "expectations": [
+  {
+   "text": "No files were modified; the run was review-only (objective: no_files_changed)",
+   "passed": true,
+   "evidence": "objective.json: files_changed = {added: [], modified: [], deleted: []}, check no_files_changed passed=true ('working tree identical to post-setup state'). Transcript step [9] runs `git status --porcelain --untracked-files=all` at the end and gets back exactly the same two pre-existing entries as step [0] (' M src/format.ts', '?? src/scratch.ts'), plus 'HEAD 1c45102' unchanged. Independently reproduced in the workspace: `git status --porcelain --untracked-files=all` still shows only those two lines. REPORT.md states 'What changed: Nothing... no files in the workspace were created, modified, or deleted.' The scratch probe scripts (register.mjs/resolver.mjs/probe.mjs) were written only to the session scratchpad, not the workspace."
+  },
+  {
+   "text": "The report names the untracked src/scratch.ts (objective: report_mentions_scratch)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_scratch passed=true. REPORT.md item 5 under 'Branch hygiene': \"**Untracked `src/scratch.ts`** (`export const scratch = 1;`) \u2014 throwaway file. A `git add -A` or `git commit -a` would sweep both of these into the PR; drop them or split them out.\" The quoted content matches the actual file verbatim (verified: workspace src/scratch.ts contains exactly `export const scratch = 1;`)."
+  },
+  {
+   "text": "The report names the unstaged edit in src/format.ts (objective: report_mentions_format_unstaged)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_format_unstaged passed=true. REPORT.md item 4: \"**Uncommitted, unrelated edit to `src/format.ts:5`** \u2014 adds `TODO: tidy this comment.` to a doc comment (and leaves the pre-existing `recieve` typo). Nothing to do with coupons.\" Verified against outputs/diff.txt and the workspace file: the only change is the added 'TODO: tidy this comment.' on line 5, and the pre-existing 'recieve' typo on line 4 is indeed still present."
+  },
+  {
+   "text": "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_threshold_gap passed=true. REPORT.md's AC table marks AC2 'Partially met': \"Subtraction is right ... but the threshold guard does not exist. `src/pricing.ts:32-33` is an unconditional `return base - 500`\", and lists it as Blocking Finding 1: \"`FLAT5` has no eligibility check (AC2/AC3) ... The spec gates it on the pre-tier subtotal (`subtotalCents(cart) >= 2000`) ... As written, small carts get a negative total\". Verified directly against workspace src/pricing.ts:32-33, which is indeed `case \"FLAT5\": return base - 500;` with no guard \u2014 confirms both the gap and the exact line numbers cited."
+  },
+  {
+   "text": "Findings are separated into standards/quality findings and spec-compliance findings",
+   "passed": true,
+   "evidence": "REPORT.md has a dedicated '## Spec compliance, criterion by criterion' table (per-AC Met/Partially met/Not met verdicts) plus '## Findings' explicitly split into two headed subsections: '**Blocking**' (items 1-3, each tied to specific AC numbers: AC2/AC3 FLAT5 guard, AC5 case-sensitivity, and a test-coverage gap explaining why the spec violations went undetected) and '**Branch hygiene (must not ride along with the merge)**' (items 4-5: the unrelated src/format.ts edit and the src/scratch.ts file \u2014 pure code-hygiene issues unconnected to the coupon spec). A further '**Non-issues I checked**' section separately calls out quality-adjacent checks (float-rounding safety, typecheck cleanliness) that were verified and dismissed. This is a clear structural separation between spec-compliance findings and standards/hygiene findings."
+  },
+  {
+   "text": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+   "passed": true,
+   "evidence": "objective.json check report_not_ready_to_merge passed=true ('not-ready phrase matched: \"not ready\"'). REPORT.md opens with \"**Verdict: not ready to merge.**\" and closes with \"Block the merge until items 1-3 are addressed ... shipping as-is would put a negative-total bug into `checkout`.\""
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "FLAT5 has no eligibility/threshold check \u2014 src/pricing.ts:32-33 is an unconditional `return base - 500` with no guard on subtotal >= 2000",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Confirmed by reading workspace src/pricing.ts: line 32 is `case \"FLAT5\":`, line 33 is `return base - 500;`, no conditional guard anywhere in the function."
+  },
+  {
+   "claim": "Coupon codes are case-sensitive because `switch (code)` at src/pricing.ts:29 never normalizes case",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Confirmed: src/pricing.ts:29 is `switch (code) {`; no `.toUpperCase()`/`.toLowerCase()` call exists anywhere in the file, so `save10`/`flat5`/`Save10` fall through to the `default` throw."
+  },
+  {
+   "claim": "npm test passes 16/16 across 6 files despite the unmet acceptance criteria",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt shows 'Test Files 6 passed (6)' / 'Tests 16 passed (16)'. tests/coupons.test.ts contains exactly one test (SAVE10, qty 10, no tier active), consistent with the report's claim that AC2-AC6 have no dedicated coverage."
+  },
+  {
+   "claim": "No files were modified in the workspace; only the pre-existing dirty state remains",
+   "type": "factual",
+   "verified": true,
+   "evidence": "objective.json files_changed lists are all empty; workspace `git status --porcelain --untracked-files=all` reproduces exactly ' M src/format.ts' and '?? src/scratch.ts', matching outputs/git-status.txt."
+  },
+  {
+   "claim": "AC6 stacking arithmetic (25 units x 100c -> subtotal 2500 -> tier 5% -> 2375 -> SAVE10 -> 2137) is correct",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Recomputed independently from src/pricing.ts: TIERS includes {minUnits:20, percent:5}, so 25 units qualifies; round(2500*5/100)=125 -> totalCents=2375. SAVE10: round(2375*0.1)=round(237.5)=238 (JS rounds .5 toward +Infinity) -> 2375-238=2137. Matches the report and the spec's own worked example."
+  },
+  {
+   "claim": "No CI configuration, lint config, or PR template exists in the repo",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Workspace root contains only .gitignore, CONTEXT.md, docs/, package.json, package-lock.json, README.md, src/, tests/, tsconfig.json \u2014 no .github directory, .eslintrc, or CI YAML files found."
+  },
+  {
+   "claim": "Brute-force scan of base - Math.round(base*0.1) vs base - Math.round(base*10/100) over bases 0..10,000,000 found zero mismatches",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Transcript step [8] shows the exact `node -e` command and its output 'bases scanned: 0..10,000,000 / mismatches found: none'. Not independently re-executed by the grader, but the command shown is a straightforward, correct way to check this and is internally consistent with the SAVE10 formula at src/pricing.ts:31."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [
+   "Did not verify behaviour for non-string or empty `code` inputs; the spec doesn't define them and TypeScript `strict` excludes them by type.",
+   "'Ready to merge' was judged only against the spec plus npm test/typecheck and branch hygiene, since no CI config, lint config, or PR template exists in the repo; GitHub-side checks (PR status, required reviews) were not consulted."
+  ],
+  "needs_review": [
+   "Uncommitted src/format.ts edit and untracked src/scratch.ts should be dropped or split out of the branch before merging (branch hygiene, unrelated to the coupon spec)."
+  ],
+  "workarounds": [
+   "The `github` MCP server failed to connect (authorization header error); the agent noted this but judged it unnecessary since the repo has no remote and the review was local."
+  ]
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "reason": "The seeded branch actually violates two acceptance criteria in src/pricing.ts: the missing FLAT5 threshold guard (AC2/AC3) and case-sensitive coupon matching (AC5, confirmed at src/pricing.ts:29 - no normalization). Only the FLAT5 gap has a dedicated expectation. A run that caught the FLAT5 issue but completely missed the case-insensitivity bug would still score 6/6 here. Consider adding an expectation like 'the report identifies that coupon codes are case-sensitive, violating AC5' to cover the second seeded defect."
+   },
+   {
+    "assertion": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+    "reason": "This objective check (and the other 'report mentions X' checks) is keyword/substring-based. A report that hedges generically ('can't fully verify, so not ready') without ever finding the actual bugs, or that mentions '2000' in an unrelated context, would pass the automated checks. It's not a problem for this specific run \u2014 the transcript shows genuine, verifiable analysis \u2014 but if these objective checks are ever consumed without the accompanying LLM judgment pass, they're weak proxies for real spec-compliance analysis."
+   }
+  ],
+  "overall": "Strong run: the report's every specific claim (line numbers, arithmetic, file contents, git state) was independently verified against the actual workspace source and holds up exactly. The expectations are well-targeted at this scenario's seeded issues (review-only discipline, branch hygiene noise, and the FLAT5 threshold gap), but miss covering the second seeded spec violation (case-insensitivity, AC5) and rely on substring-level objective checks that this run happens to satisfy substantively rather than superficially."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Bash": 10
+  },
+  "total_tool_calls": 10,
+  "total_steps": 11,
+  "errors_encountered": 0,
+  "output_chars": 7776,
+  "transcript_chars": 15870
+ }
+}

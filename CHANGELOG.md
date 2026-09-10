@@ -14,3 +14,10 @@
 
 ### 1.0.0 — 2026-09-10
 - `MATT-POCOCK-AGENT-INSTRUCTIONS.md` installed verbatim as `~/.claude/skills/matt-pocock-workflow/SKILL.md`. Archived as `sources/matt-pocock-workflow-v1.0.0.SKILL.md`.
+
+## Benchmark
+
+### Iteration 1 — 2026-09-11
+- Six scenarios × three arms (combo / MP-only / no router) on Opus 5, graded objectively plus one LLM grader per run.
+- Result: combo 35/35, MP-only 34/35, no router 32/35; token cost 21.8 M / 15.7 M / 3.7 M.
+- Only the concurrency-bug and small-feature scenarios discriminated. See `benchmark/runs/iteration-1/analysis.md` and `benchmark.md`.

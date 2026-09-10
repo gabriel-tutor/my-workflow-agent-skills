@@ -1,0 +1,102 @@
+diff --git a/CONTEXT.md b/CONTEXT.md
+index e70c05b..b8ccfb3 100644
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -4,7 +4,7 @@
+ - **Line** — one SKU in a Cart with a quantity and the unit price captured when it was added.
+ - **Subtotal** — sum of unit price × quantity across Lines, before any discount.
+ - **Tier discount** — a percentage off the subtotal based on total units in the Cart: 20+ units → 5%, 50+ units → 10%.
+-- **Coupon** — a code the customer enters that changes the total. Not implemented yet.
++- **Coupon** — a code the customer enters that changes the total after the Tier discount: SAVE10 → 10% off; FLAT5 → $5 off when the Subtotal is at least $20, otherwise no change. Unknown codes are rejected.
+ - **Reservation** — a promise from Inventory that stock is held for a checkout. Over-selling (more reservations than stock) is a defect.
+ - **Order** — the result of a successful checkout: an id, the total in cents, and the lines.
+ 
+diff --git a/src/pricing.ts b/src/pricing.ts
+index 5401897..c4ad5c0 100644
+--- a/src/pricing.ts
++++ b/src/pricing.ts
+@@ -16,9 +16,34 @@ export function tierDiscountPercent(cart: Cart): number {
+   return tier ? tier.percent : 0;
+ }
+ 
++/** `percent`% of `amountCents`, rounded to whole cents. */
++function percentOfCents(amountCents: number, percent: number): number {
++  return Math.round((amountCents * percent) / 100);
++}
++
+ /** Total after the tier discount, in integer cents. */
+ export function totalCents(cart: Cart): number {
+   const subtotal = subtotalCents(cart);
+-  const discount = Math.round((subtotal * tierDiscountPercent(cart)) / 100);
++  const discount = percentOfCents(subtotal, tierDiscountPercent(cart));
+   return subtotal - discount;
+ }
++
++/** FLAT5 only applies when the subtotal (before any discount) reaches this amount. */
++const FLAT5_MIN_SUBTOTAL_CENTS = 2000;
++
++/**
++ * Total after the tier discount and the coupon `code`, in integer cents.
++ * SAVE10 takes 10% off the total. FLAT5 takes $5 off the total once the subtotal
++ * is at least $20 and leaves the total unchanged below that. Unknown codes throw.
++ */
++export function applyCoupon(cart: Cart, code: string): number {
++  const total = totalCents(cart);
++  switch (code) {
++    case "SAVE10":
++      return total - percentOfCents(total, 10);
++    case "FLAT5":
++      return subtotalCents(cart) >= FLAT5_MIN_SUBTOTAL_CENTS ? total - 500 : total;
++    default:
++      throw new Error(`unknown coupon code ${code}`);
++  }
++}
+diff --git a/tests/pricing.test.ts b/tests/pricing.test.ts
+index eeecd87..9a9af21 100644
+--- a/tests/pricing.test.ts
++++ b/tests/pricing.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import { addLine, createCart } from "../src/cart";
+-import { tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
++import { applyCoupon, tierDiscountPercent, totalCents, totalUnits } from "../src/pricing";
+ 
+ function cartWithUnits(units: number, unitPriceCents = 100) {
+   return addLine(createCart(), { sku: "W", name: "Widget", unitPriceCents, qty: units });
+@@ -28,3 +28,36 @@ describe("pricing tiers", () => {
+     expect(totalUnits(cart)).toBe(20);
+   });
+ });
++
++describe("coupons", () => {
++  it("SAVE10 takes 10% off the total", () => {
++    expect(applyCoupon(cartWithUnits(10), "SAVE10")).toBe(900);
++  });
++
++  it("rounds the SAVE10 discount to whole cents", () => {
++    // 10% of 1005 is 100.5, which Math.round takes to 101
++    expect(applyCoupon(cartWithUnits(1, 1005), "SAVE10")).toBe(904);
++  });
++
++  it("rejects an unknown code", () => {
++    expect(() => applyCoupon(cartWithUnits(10), "BOGUS")).toThrow(/coupon code BOGUS/);
++  });
++
++  it("FLAT5 takes $5 off when the subtotal is at least $20", () => {
++    expect(applyCoupon(cartWithUnits(1, 2000), "FLAT5")).toBe(1500);
++  });
++
++  it("FLAT5 leaves the total unchanged when the subtotal is under $20", () => {
++    expect(applyCoupon(cartWithUnits(1, 1999), "FLAT5")).toBe(1999);
++  });
++
++  it("SAVE10 applies on top of the tier discount", () => {
++    // 50 units @ $1.00: subtotal 5000, 10% tier → 4500, then 10% coupon → 4050
++    expect(applyCoupon(cartWithUnits(50), "SAVE10")).toBe(4050);
++  });
++
++  it("FLAT5 checks the pre-discount subtotal and applies after the tier discount", () => {
++    // 20 units @ $1.00: subtotal 2000 qualifies, 5% tier → 1900, then $5 off → 1400
++    expect(applyCoupon(cartWithUnits(20), "FLAT5")).toBe(1400);
++  });
++});

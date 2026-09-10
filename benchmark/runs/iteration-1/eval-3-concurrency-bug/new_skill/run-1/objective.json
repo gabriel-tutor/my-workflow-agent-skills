@@ -1,0 +1,99 @@
+{
+ "scenario": "concurrency-bug",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "src/inventory.ts",
+   "tests/inventory.test.ts",
+   "tests/orders.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-superpowers-workflow"
+  ],
+  [
+   1,
+   "superpowers:using-superpowers"
+  ],
+  [
+   9,
+   "superpowers:systematic-debugging"
+  ],
+  [
+   10,
+   "diagnosing-bugs"
+  ],
+  [
+   18,
+   "superpowers:test-driven-development"
+  ],
+  [
+   26,
+   "superpowers:verification-before-completion"
+  ]
+ ],
+ "agent_calls": 0,
+ "edit_events": [
+  [
+   11,
+   "0"
+  ],
+  [
+   13,
+   "tests/__repro_oversell.test.ts"
+  ],
+  [
+   14,
+   "tests/__repro_min.test.ts"
+  ],
+  [
+   15,
+   "tests/__repro_probe.test.ts"
+  ],
+  [
+   21,
+   "="
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {},
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "/Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/new_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "concurrent_test_added": {
+   "passed": true,
+   "evidence": "tests with concurrent reserve(): ['tests/inventory.test.ts']"
+  },
+  "test_edited_before_inventory": {
+   "passed": true,
+   "evidence": "first test-file edit at event 13; first src/inventory.ts edit at event None"
+  },
+  "diagnosis_skill_before_inventory_edit": {
+   "passed": true,
+   "evidence": "diagnosis skill at event 9; first src/inventory.ts edit at event None; skills: ['matt-pocock-superpowers-workflow', 'superpowers:using-superpowers', 'superpowers:systematic-debugging', 'diagnosing-bugs', 'superpowers:test-driven-development', 'superpowers:verification-before-completion']"
+  },
+  "new_test_fails_on_baseline": {
+   "passed": true,
+   "evidence": "exit 1 with baseline src/inventory.ts: \u2026ry.test.ts:37:32\n     35|     const results = await Promise.all([inv.reserve(\"A\", 1), inv.reserv\u2026\n     36|     expect(results).toEqual([true, true]);\n     37|     expect(inv.available(\"A\")).toBe(0);\n       |                                ^\n     38|   });\n     39| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-3-concurrency-bug/new_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  18 passed (18)\n   Start at  04:39:00\n   Duration  131ms (transform 70%, import 17%, tests 8%, worker 5%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  }
+ }
+}

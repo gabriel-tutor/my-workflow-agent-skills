@@ -1,0 +1,54 @@
+diff --git a/src/format.ts b/src/format.ts
+index 7910884..bec7bd8 100644
+--- a/src/format.ts
++++ b/src/format.ts
+@@ -6,9 +6,16 @@ import { type Line } from "./cart";
+  */
+ export function formatLine(line: Line): string {
+   const total = line.unitPriceCents * line.qty;
+-  return `${line.qty} x ${line.name} @ ${cents(line.unitPriceCents)} = ${cents(total)}`;
++  return `${line.qty} x ${line.name} @ ${dollars(line.unitPriceCents)} = ${dollars(total)}`;
+ }
+ 
+-function cents(n: number): string {
+-  return (n / 100).toFixed(2);
++/** Formats integer cents as a dollar string, e.g. 1234 → "$12.34" and -1234 → "-$12.34". */
++export function formatMoney(cents: number): string {
++  const sign = cents < 0 ? "-" : "";
++  return `${sign}$${dollars(Math.abs(cents))}`;
++}
++
++/** Integer cents → two-decimal dollar amount without a currency symbol, e.g. 150 → "1.50". */
++function dollars(cents: number): string {
++  return (cents / 100).toFixed(2);
+ }
+diff --git a/tests/format.test.ts b/tests/format.test.ts
+index bda8046..0ae762d 100644
+--- a/tests/format.test.ts
++++ b/tests/format.test.ts
+@@ -1,8 +1,24 @@
+ import { describe, expect, it } from "vitest";
+-import { formatLine } from "../src/format";
++import { formatLine, formatMoney } from "../src/format";
+ 
+ describe("formatLine", () => {
+   it("renders qty, name, unit price and line total", () => {
+     expect(formatLine({ sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 })).toBe("2 x Apple @ 1.50 = 3.00");
+   });
+ });
++
++describe("formatMoney", () => {
++  it("renders integer cents as a dollar string", () => {
++    expect(formatMoney(1234)).toBe("$12.34");
++  });
++
++  it("always shows two cent digits", () => {
++    expect(formatMoney(0)).toBe("$0.00");
++    expect(formatMoney(5)).toBe("$0.05");
++    expect(formatMoney(100)).toBe("$1.00");
++  });
++
++  it("puts the minus sign before the dollar sign for negative amounts", () => {
++    expect(formatMoney(-1234)).toBe("-$12.34");
++  });
++});

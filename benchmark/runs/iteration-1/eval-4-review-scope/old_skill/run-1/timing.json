@@ -1,0 +1,19 @@
+{
+ "total_tokens": 2152480,
+ "duration_ms": 559649,
+ "total_duration_seconds": 559.6,
+ "source": "derived from agent.jsonl timestamps and deduplicated usage",
+ "coordinator_tokens": 1507746,
+ "nested_agents": 2,
+ "nested_tokens": 644734,
+ "nested": [
+  {
+   "agent": "agent-a2d4d7c7f4ecfe855.jsonl",
+   "tokens": 309184
+  },
+  {
+   "agent": "agent-a96ca04ca884805df.jsonl",
+   "tokens": 335550
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "expectations": [
+  {
+   "text": "A test exercising concurrent reserve() calls (Promise.all or equivalent) was added (objective: concurrent_test_added)",
+   "passed": true,
+   "evidence": "tests/inventory.test.ts adds: `const results = await Promise.all([inv.reserve(\"A\", 1), inv.reserve(\"A\", 1)]); expect(results.filter((reserved) => reserved)).toHaveLength(1); expect(inv.available(\"A\")).toBe(0);` (outputs/diff.txt). objective.json concurrent_test_added: passed, evidence \"tests with concurrent reserve(): ['tests/inventory.test.ts']\"."
+  },
+  {
+   "text": "That test was written before src/inventory.ts was edited (objective: test_edited_before_inventory)",
+   "passed": true,
+   "evidence": "The concurrent test is added to tests/inventory.test.ts at transcript event [16] and immediately fails against then-current code ('AssertionError: expected [ true, true ] to have a length of 1 but got 2', 'Tests 1 failed | 3 passed (4)'). The real src/inventory.ts fix (withSkuLock) is written at event [17] ('Tests 4 passed (4)'), which is the first point git status shows 'M src/inventory.ts' \u2014 at event [13] (after the diagnosis probe of events [12]-[13] instrumented then fully reverted the file: 'no DEBUG-ovs1 left in src/tests') git status shows the file still clean, only the two throwaway test files as untracked. So the persisting inventory.ts change strictly follows the test. objective.json's test_edited_before_inventory also passed (evidence: 'first test-file edit at event 9; first src/inventory.ts edit at event 13')."
+  },
+  {
+   "text": "The new test fails on the baseline inventory.ts and passes after the fix (objective: new_test_fails_on_baseline, tests_pass)",
+   "passed": true,
+   "evidence": "Event [16]: new tests/inventory.test.ts test fails pre-fix ('AssertionError: expected [ true, true ] to have a length of 1 but got 2'); event [17]: passes post-fix ('Tests 4 passed (4)'). Event [20]: the new tests/orders.test.ts test fails the same way pre-fix, and the report additionally verified via 'git stash push -- src/inventory.ts && npx vitest run tests/orders.test.ts' (fails) then 'git stash pop' (4/4 passed), repeating for both kept tests against the final code ('2 failed on baseline, 8/8 passed on fix'). Final full suite is 17/17 (outputs/test-output.txt; objective.json tests_pass: true). objective.json new_test_fails_on_baseline: true, quoting the same assertion lines against the baseline file."
+  },
+  {
+   "text": "A diagnosis skill (superpowers:systematic-debugging or diagnosing-bugs) was invoked before the first edit to src/inventory.ts (objective: diagnosis_skill_before_inventory_edit)",
+   "passed": true,
+   "evidence": "Event [7]: Skill diagnosing-bugs launched, before any touch of src/inventory.ts (first touch, a temporary debug-instrumentation, is event [12]; the real fix is event [17]). objective.json diagnosis_skill_before_inventory_edit: passed, evidence 'diagnosis skill at event 7; first src/inventory.ts edit at event 13; skills: [\"matt-pocock-workflow\", \"diagnosing-bugs\", \"tdd\", \"code-review\"]'."
+  },
+  {
+   "text": "The original single-reserve tests still pass and typecheck is clean (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "outputs/diff.txt shows both test-file hunks are pure additions (@@ -20,4 +20,12 @@ and @@ -25,4 +25,14 @@, no removed lines) \u2014 pre-existing tests are untouched. Baseline was 15/15 passing (event [8]); final suite is 17/17 (events [21],[29]; outputs/test-output.txt), i.e. the 15 originals plus the 2 new tests. 'typecheck exit: 0' reported repeatedly (events [17],[21],[27],[29]) and outputs/typecheck-output.txt is empty. objective.json tests_pass and typecheck_pass both passed."
+  },
+  {
+   "text": "The report distinguishes what was verified from remaining risk (for example multi-process or cross-SKU cases) instead of over-claiming",
+   "passed": true,
+   "evidence": "outputs/REPORT.md separates '## What was verified' (specific commands/outputs: baseline run, repro/minimise probes, TDD red/green per file, a git-stash re-check against the true baseline, and post-review probes including a mixed-SKU-A/B run and a throwing task) from '## What remains / could not be verified', which names concrete unfixed pre-existing defects (setStock bypasses the lock; checkout releases nothing on partial failure, risking under-sell), the throughput cost of per-SKU serialisation, that post-review edits were not re-reviewed, and that nothing was committed. This is a genuine verified-vs-risk split, not boilerplate. Minor gap: the report doesn't caveat that the lock's equivalence to a production row lock is per-process/per-instance only (see eval_feedback)."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "The public interface reserve(sku, qty): Promise<boolean> is unchanged by the fix",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt: old `async reserve(sku: string, qty: number): Promise<boolean>` vs new `reserve(sku: string, qty: number): Promise<boolean>` \u2014 body now wraps in withSkuLock but the call signature and return type are identical."
+  },
+  {
+   "claim": "N concurrent reservations of the same SKU now cost ~N sequential round trips instead of ~1",
+   "type": "quality",
+   "verified": true,
+   "evidence": "withSkuLock chains each call onto the SKU's previous promise (`const tail = previous.then(() => held)`), so callers for one SKU run strictly one at a time; the report's own probe (20 callers on stock 5 -> exactly 5 successes) is consistent with that serialisation."
+  },
+  {
+   "claim": "No DEBUG-/REPRO-/THROWAWAY instrumentation or throwaway test files were left behind",
+   "type": "process",
+   "verified": true,
+   "evidence": "outputs/git-status.txt lists only ' M src/inventory.ts', ' M tests/inventory.test.ts', ' M tests/orders.test.ts' with no untracked files, matching event [21]'s 'no instrumentation/throwaway markers left' and the final check at event [29]."
+  },
+  {
+   "claim": "This in-memory lock gives reserve() 'the same guarantee' as a production database row lock (SELECT ... FOR UPDATE) held across the round trip",
+   "type": "quality",
+   "verified": false,
+   "evidence": "True only within a single process/single Inventory instance, which is all this codebase has (simulateIo() models the I/O gap but there is no real database or second instance to test against). The doc comment and report state this unqualified, slightly overstating what was actually verified \u2014 see eval_feedback."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "A test exercising concurrent reserve() calls (Promise.all or equivalent) was added (objective: concurrent_test_added)",
+    "reason": "The only permanently-kept concurrency tests use two callers on one SKU. The agent itself verified more discriminating cases \u2014 per-SKU independence (interleaved SKU A and B calls), a rejecting task not jamming the queue, and the lock map draining to size 0 \u2014 but only in tests/zz-throwaway-final-check.test.ts, deleted before finishing. A single global lock (instead of the per-SKU withSkuLock actually implemented) or a lock that leaks on rejection would still pass every currently-graded expectation. Consider requiring at least one such edge-case regression test to survive in the final diff."
+   },
+   {
+    "reason": "The fix's doc comment and the report both assert the in-memory per-instance lock gives 'the same guarantee' as a production DB row lock. That equivalence holds only within a single process/instance; nothing here checks or flags that multiple app instances sharing a real database would still need the real row lock, not this Map-based one. This is the 'multi-process' caveat expectation 6's example gestures at, and it is the one place the report overstates rather than scopes its claim."
+   }
+  ],
+  "overall": "The TDD/diagnosis-ordering and regression-safety expectations are well-evidenced with real command output, cross-checked more than once (live red/green plus a later git-stash replay against the true baseline). The main blind spot across the eval set is concurrency edge cases beyond the single two-caller/one-SKU scenario: the agent demonstrably tested them, then discarded the evidence, and no assertion would notice a future regression there."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Bash": 23,
+   "Skill": 3,
+   "Agent": 3
+  },
+  "total_tool_calls": 30,
+  "total_steps": 31,
+  "errors_encountered": 2,
+  "output_chars": 8074,
+  "transcript_chars": 25263
+ }
+}

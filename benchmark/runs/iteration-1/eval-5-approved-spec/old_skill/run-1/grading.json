@@ -1,0 +1,105 @@
+{
+ "expectations": [
+  {
+   "text": "No design interview skill was invoked: no superpowers:brainstorming, grill-me, grill-with-docs, or grilling (objective: no_design_interview_skill)",
+   "passed": true,
+   "evidence": "objective.json: no_design_interview_skill passed=true, evidence 'interview skills invoked: none'. Transcript Skill-tool calls are only tdd (step 8), domain-modeling (step 23), and code-review (step 26); no superpowers:brainstorming, grill-me, grill-with-docs, or grilling skill appears anywhere in the run."
+  },
+  {
+   "text": "Tests and typecheck pass (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json: tests_pass=true, typecheck_pass=true. outputs/test-output.txt: 'Test Files  5 passed (5) / Tests  21 passed (21)'. outputs/typecheck-output.txt is empty, matching a clean `tsc --noEmit`; transcript step 22 shows the command run with '=== typecheck exit: 0 ==='."
+  },
+  {
+   "text": "All eight hidden acceptance tests pass, i.e. every criterion in docs/spec-coupons.md is implemented (objective: hidden_acceptance_all_pass; list any failing AC)",
+   "passed": true,
+   "evidence": "objective.json hidden_tests: all 8 entries (AC1, AC2, AC3, AC3m, AC4, AC4m, AC5, AC6) are 'passed'; hidden_acceptance_all_pass=true. No failing AC. These cover the 6 numbered ACs in docs/spec-coupons.md (AC3 and AC4 each hidden-tested twice: throw behavior plus message-substring)."
+  },
+  {
+   "text": "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+   "passed": true,
+   "evidence": "docs/spec-coupons.md Test seam: 'Tests exercise applyCoupon through the public module interface with carts built via createCart / addLine. No internal helpers are tested directly.' Read tests/pricing.test.ts: all 6 tests in describe('coupons') call applyCoupon(cartWithUnits(...), CODE), where cartWithUnits only calls createCart()/addLine(); no internal helper (tierDiscountPercent, subtotalCents) is used inside the coupons block. objective.json coupon_tests_exist=true."
+  },
+  {
+   "text": "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+   "passed": true,
+   "evidence": "objective.json single_execution_mode=true, evidence 'execution-mode skills invoked: none (direct)'. Transcript Skill-tool invocations are only tdd (step 8, the standalone tdd skill, distinct from superpowers:test-driven-development), domain-modeling (step 23), and code-review (step 26). The agent's own report states: '`implement` is user-invoked and was not invoked, so not run.' No Superpowers execution skill (executing-plans / subagent-driven-development / test-driven-development) appears anywhere in the transcript. Note: objective.json's general skills_invoked list also shows 'matt-pocock-workflow' at step 0, but that is the Read of SKILL.md the team lead's prompt explicitly directed, not a Skill-tool execution-mode invocation or a second execution mode."
+  },
+  {
+   "text": "The report maps the spec's acceptance criteria to verification evidence rather than restating the spec",
+   "passed": true,
+   "evidence": "outputs/REPORT.md 'Process (skills applied)' item 2 ties each AC to concrete evidence: 'AC1 red: TypeError: applyCoupon is not a function -> green.', same pattern for AC4/AC2/AC3/AC5, and 'AC6 green on arrival ...; mutation check (rounding the total instead of the discount) produced expected 2138 to be 2137, then reverted -> 10/10.' The 'What I verified' section lists exact commands (npm test, npm run typecheck, git diff --stat) and observed counts (15 -> 21 tests) rather than repeating the spec's prose."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "totalCents is byte-identical to / unchanged from baseline",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows the only hunk in src/pricing.ts is a pure addition (the new applyCoupon function) appended after the existing totalCents function; totalCents itself has zero changed lines."
+  },
+  {
+   "claim": "npm test went from 15 passing tests before the change to 21 passing after",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step 7 (baseline): 'Tests  15 passed (15)'. outputs/test-output.txt and transcript step 22 (final): 'Tests  21 passed (21)'."
+  },
+  {
+   "claim": "Six spec-derived tests were added, one per acceptance criterion",
+   "type": "factual",
+   "verified": true,
+   "evidence": "tests/pricing.test.ts describe('coupons') block contains exactly 6 it(...) cases, matching AC1 (SAVE10), AC4 (unknown code), AC2 (FLAT5 threshold), AC3 (FLAT5 not applicable), AC5 (case-insensitive), AC6 (stacking/rounding)."
+  },
+  {
+   "claim": "Each TDD slice was observed red before green, except AC6 which was verified by a mutation check instead",
+   "type": "process",
+   "verified": true,
+   "evidence": "Transcript steps 10-20 each show a failing vitest run (TypeError / AssertionError / thrown Error) immediately followed by a passing run after the matching src/pricing.ts edit; step 21 shows a deliberate mutation (rounding the total instead of the discount) failing with 'expected 2138 to be 2137', then a revert restoring 10/10."
+  },
+  {
+   "claim": "Case-insensitivity is only tested via the 'save10' example; a lowercase 'flat5' is not separately tested",
+   "type": "quality",
+   "verified": true,
+   "evidence": "tests/pricing.test.ts's only case-insensitivity test is 'matches codes case-insensitively', which calls applyCoupon(cartWithUnits(19), 'save10'); no test calls applyCoupon with a lowercase 'flat5'."
+  },
+  {
+   "claim": "The parallel Spec-review subagent's finding of 0 issues (interface, all six ACs, totalCents unchanged, test seam all satisfied) is accurate",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Independently re-checked docs/spec-coupons.md's interface line, all 6 ACs, and the test-seam requirement against src/pricing.ts and tests/pricing.test.ts directly; each holds, consistent with the transcript's Agent result summary and objective.json's hidden_acceptance_all_pass=true."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "hidden_acceptance_all_pass / AC5 codes are case-insensitive",
+    "reason": "Both the agent's own test suite and, as far as can be observed, the hidden AC5 check exercise case-insensitivity only through the spec's 'save10' example; a lowercase 'flat5' is never independently exercised anywhere. The implementation happens to route both codes through one shared normalize-then-compare step, so nothing is broken here, but as written no assertion would catch a regression that fixed SAVE10's case-handling while breaking FLAT5's."
+   }
+  ],
+  "overall": "Expectations are solid and discriminating overall (each requires genuine implementation, not surface compliance) \u2014 one coverage gap worth flagging: case-insensitivity coverage is asymmetric across the two coupon codes (see suggestion)."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Bash": 26,
+   "Skill": 3,
+   "Agent": 4
+  },
+  "total_tool_calls": 34,
+  "total_steps": 33,
+  "errors_encountered": 2,
+  "output_chars": 6811,
+  "transcript_chars": 24877
+ }
+}

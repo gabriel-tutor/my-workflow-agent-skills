@@ -1,0 +1,73 @@
+diff --git a/src/format.ts b/src/format.ts
+index 7910884..6c8b200 100644
+--- a/src/format.ts
++++ b/src/format.ts
+@@ -9,6 +9,21 @@ export function formatLine(line: Line): string {
+   return `${line.qty} x ${line.name} @ ${cents(line.unitPriceCents)} = ${cents(total)}`;
+ }
+ 
++/**
++ * Formats integer cents as a dollar string: `1234` → `$12.34`. Negative amounts
++ * get a leading minus (`-1234` → `-$12.34`) and no thousands separators are
++ * inserted. Non-integer input is rounded to the nearest cent with `Math.round`.
++ */
++export function formatMoney(cents: number): string {
++  if (!Number.isFinite(cents)) throw new Error(`cents must be a finite number, got ${cents}`);
++  const rounded = Math.round(cents);
++  const abs = Math.abs(rounded);
++  const dollars = Math.floor(abs / 100);
++  const remainder = abs % 100;
++  const sign = rounded < 0 ? "-" : "";
++  return `${sign}$${dollars}.${String(remainder).padStart(2, "0")}`;
++}
++
+ function cents(n: number): string {
+   return (n / 100).toFixed(2);
+ }
+diff --git a/tests/format.test.ts b/tests/format.test.ts
+index bda8046..564e049 100644
+--- a/tests/format.test.ts
++++ b/tests/format.test.ts
+@@ -1,8 +1,41 @@
+ import { describe, expect, it } from "vitest";
+-import { formatLine } from "../src/format";
++import { formatLine, formatMoney } from "../src/format";
+ 
+ describe("formatLine", () => {
+   it("renders qty, name, unit price and line total", () => {
+     expect(formatLine({ sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 })).toBe("2 x Apple @ 1.50 = 3.00");
+   });
+ });
++
++describe("formatMoney", () => {
++  it("formats cents as a dollar string", () => {
++    expect(formatMoney(1234)).toBe("$12.34");
++    expect(formatMoney(100)).toBe("$1.00");
++    expect(formatMoney(199)).toBe("$1.99");
++  });
++
++  it("pads amounts below one dollar to two decimal places", () => {
++    expect(formatMoney(0)).toBe("$0.00");
++    expect(formatMoney(5)).toBe("$0.05");
++    expect(formatMoney(50)).toBe("$0.50");
++  });
++
++  it("does not insert thousands separators", () => {
++    expect(formatMoney(123456789)).toBe("$1234567.89");
++  });
++
++  it("renders negative amounts with a leading minus", () => {
++    expect(formatMoney(-1234)).toBe("-$12.34");
++    expect(formatMoney(-5)).toBe("-$0.05");
++  });
++
++  it("rounds non-integer cents to the nearest cent", () => {
++    expect(formatMoney(1234.4)).toBe("$12.34");
++    expect(formatMoney(1234.6)).toBe("$12.35");
++  });
++
++  it("rejects non-finite input", () => {
++    expect(() => formatMoney(NaN)).toThrow("cents must be a finite number");
++    expect(() => formatMoney(Infinity)).toThrow("cents must be a finite number");
++  });
++});

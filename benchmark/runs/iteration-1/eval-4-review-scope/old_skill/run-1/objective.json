@@ -1,0 +1,59 @@
+{
+ "scenario": "review-scope",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-workflow"
+  ],
+  [
+   11,
+   "code-review"
+  ]
+ ],
+ "agent_calls": 4,
+ "edit_events": [
+  [
+   16,
+   "="
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {},
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "benchmark/runs/iteration-1/eval-4-review-scope/old_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "no_files_changed": {
+   "passed": true,
+   "evidence": "working tree identical to post-setup state"
+  },
+  "report_mentions_scratch": {
+   "passed": true,
+   "evidence": "mentions src/scratch.ts"
+  },
+  "report_mentions_format_unstaged": {
+   "passed": true,
+   "evidence": "mentions src/format.ts as unstaged: 'working tree'"
+  },
+  "report_mentions_threshold_gap": {
+   "passed": true,
+   "evidence": "mentions the >= 2000 rule: '2000'"
+  },
+  "report_not_ready_to_merge": {
+   "passed": true,
+   "evidence": "not-ready phrase matched: 'not ready'"
+  }
+ }
+}

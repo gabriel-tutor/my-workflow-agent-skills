@@ -1,0 +1,19 @@
+{
+ "tool_calls": {
+  "Read": 1,
+  "Bash": 23,
+  "Skill": 3,
+  "Agent": 3
+ },
+ "total_tool_calls": 30,
+ "total_steps": 31,
+ "errors_encountered": 2,
+ "malformed_lines": 0,
+ "transcript_chars": 25263,
+ "usage": {
+  "input_tokens": 62,
+  "output_tokens": 3064,
+  "cache_read_input_tokens": 2604909,
+  "cache_creation_input_tokens": 109545
+ }
+}

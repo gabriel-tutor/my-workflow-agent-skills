@@ -1,0 +1,114 @@
+{
+ "expectations": [
+  {
+   "text": "No files were modified; the run was review-only (objective: no_files_changed)",
+   "passed": true,
+   "evidence": "objective.json: no_files_changed passed=true ('working tree identical to post-setup state'); files_changed shows added/modified/deleted all empty. The transcript's first workspace inspection (step [5], before any action) already shows the dirtied state, and the agent's closing line states 'Changed: nothing \u2014 review only, no files in the workspace were created, modified, or staged.' Independently re-checked: outputs/git-status.txt and a fresh `git status --short` in the workspace both still show only ` M src/format.ts` and `?? src/scratch.ts` \u2014 the pre-existing scenario-setup dirt called out in the grader brief, not agent writes."
+  },
+  {
+   "text": "The report names the untracked src/scratch.ts (objective: report_mentions_scratch)",
+   "passed": true,
+   "evidence": "objective.json report_mentions_scratch passed=true. REPORT.md has a dedicated '**Untracked: `src/scratch.ts`**' subsection under Standards ('export const scratch = 1; \u2014 possible Mysterious Name / dead code; nothing imports it... Delete it') and again under Spec's scope-creep section, not just a passing mention."
+  },
+  {
+   "text": "The report names the unstaged edit in src/format.ts (objective: report_mentions_format_unstaged)",
+   "passed": true,
+   "evidence": "objective.json report_mentions_format_unstaged passed=true. REPORT.md has a dedicated '**Unstaged: `src/format.ts`**' subsection describing the JSDoc 'TODO: tidy this comment.' addition, which matches outputs/diff.txt exactly, plus a second mention under Spec's scope-creep section recommending it be dropped or committed separately."
+  },
+  {
+   "text": "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+   "passed": true,
+   "evidence": "objective.json report_mentions_threshold_gap passed=true. REPORT.md item (a).1 quotes the spec's 'at least 2000 cents' / 'below 2000 cents throws ... not applicable' language and states 'src/pricing.ts:32-33 unconditionally returns base - 500 and never calls subtotalCents', with observed negative-output examples. Independently confirmed by reading the actual workspace files: src/pricing.ts's FLAT5 branch is exactly `return base - 500;` with no subtotal check, and docs/spec-coupons.md AC2/AC3 require the >=2000-cent gate and a 'not applicable' throw below it."
+  },
+  {
+   "text": "Findings are separated into standards/quality findings and spec-compliance findings",
+   "passed": true,
+   "evidence": "REPORT.md uses two distinct top-level headers, '## Standards' (documented-standards compliance, baseline Fowler-smell judgement calls, per-file notes) and '## Spec' (missing/partial requirements, scope creep, implemented-but-wrong), each organized and reasoned about separately rather than interleaved."
+  },
+  {
+   "text": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+   "passed": true,
+   "evidence": "objective.json report_not_ready_to_merge passed=true ('not-ready phrase matched'). REPORT.md/transcript states '# Verdict: not ready to merge' and closes with 'What has to happen before merge: implement the FLAT5 >= 2000-subtotal gate ... normalise code case (AC5), add seam-level tests ... revert or separate the src/format.ts comment edit, delete src/scratch.ts, and update the Coupon entry in CONTEXT.md.'"
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "npm test passes 16/16 tests (6 test files)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt: 'Test Files 6 passed (6)', 'Tests 16 passed (16)'; matches objective.json tests_pass=true."
+  },
+  {
+   "claim": "npm run typecheck (tsc --noEmit) produces no errors",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/typecheck-output.txt is empty (0 bytes), consistent with a clean tsc run; matches objective.json typecheck_pass=true."
+  },
+  {
+   "claim": "FLAT5 unconditionally returns base - 500 with no subtotal gate and no throw for carts below 2000 cents",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Read workspace src/pricing.ts directly: `case \"FLAT5\": return base - 500;` inside applyCoupon, no conditional on subtotalCents anywhere in the function."
+  },
+  {
+   "claim": "Coupon-code matching is case-sensitive; AC5 (case-insensitivity) is not implemented",
+   "type": "factual",
+   "verified": true,
+   "evidence": "src/pricing.ts:29 is `switch (code)` comparing the raw argument against literal 'SAVE10'/'FLAT5' with no normalization (no .toUpperCase()/.toLowerCase())."
+  },
+  {
+   "claim": "Nothing in the codebase calls applyCoupon yet; checkout/orders.ts still uses totalCents, so the negative-total bug doesn't currently reach Order.totalCents",
+   "type": "factual",
+   "verified": true,
+   "evidence": "grep of workspace src/orders.ts shows only `import { totalCents } from \"./pricing\"` and its use in building the order; no reference to applyCoupon outside its own definition and tests/coupons.test.ts."
+  },
+  {
+   "claim": "The workspace was left unchanged after the two parallel sub-agent reviews ran",
+   "type": "process",
+   "verified": true,
+   "evidence": "Independently re-ran `git status --short` in the workspace after reading the transcript: output is still exactly ` M src/format.ts` / `?? src/scratch.ts`, matching the pre-run state and outputs/git-status.txt."
+  },
+  {
+   "claim": "AC6 stacking example (25 units @ 100 cents, tier then SAVE10) computes to 2137",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Manual recomputation from docs/spec-coupons.md's own worked example: subtotal 2500 -> 5% tier discount round(125)=125 -> 2375 -> SAVE10 10% round(237.5)=238 -> 2137. Matches the report's stated result exactly."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+    "reason": "This and the other three objective checks (report_mentions_scratch, report_mentions_format_unstaged, report_mentions_threshold_gap) read as substring/phrase matches against the report text. A hedging report that reflexively concludes 'not ready to merge' with no real analysis, or one that name-drops 'src/scratch.ts', 'src/format.ts', or '2000' in passing without substantive findings, would also satisfy these checks. This run's mentions are all substantive (verified above), but the checks themselves don't distinguish that from keyword-stuffing."
+   },
+   {
+    "reason": "The spec has two independent, equally real gaps: FLAT5's missing >=2000-cent gate (AC2/AC3, covered by report_mentions_threshold_gap) and the missing case-insensitivity handling (AC5, verified above but not covered by any expectation). A run that found only the FLAT5 gap and missed AC5 entirely would still score 6/6 \u2014 worth adding a dedicated expectation for the case-insensitivity gap."
+   }
+  ],
+  "overall": "Evals are largely solid and this run genuinely earns all 6 passes on substance, independently re-verified against the actual workspace source (src/pricing.ts, docs/spec-coupons.md, src/orders.ts) rather than taking the report's claims at face value. The four report_mentions_* / report_not_ready_to_merge checks are phrase-matches rather than substance checks, and the AC5 case-insensitivity gap has no dedicated coverage \u2014 see suggestions."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Bash": 16,
+   "Skill": 1,
+   "Agent": 4
+  },
+  "total_tool_calls": 22,
+  "total_steps": 21,
+  "errors_encountered": 3,
+  "output_chars": 11786,
+  "transcript_chars": 25541
+ }
+}

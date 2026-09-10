@@ -1,0 +1,92 @@
+{
+ "scenario": "approved-spec",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "CONTEXT.md",
+   "src/pricing.ts",
+   "tests/pricing.test.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-workflow"
+  ],
+  [
+   8,
+   "tdd"
+  ],
+  [
+   23,
+   "domain-modeling"
+  ],
+  [
+   26,
+   "code-review"
+  ]
+ ],
+ "agent_calls": 4,
+ "edit_events": [
+  [
+   11,
+   "src/pricing.ts"
+  ],
+  [
+   21,
+   "src/pricing.ts"
+  ],
+  [
+   21,
+   "s"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {
+  "AC1 SAVE10 subtracts 10% of the post-tier total": "passed",
+  "AC2 FLAT5 subtracts 500 when the subtotal is at least 2000": "passed",
+  "AC3 FLAT5 below the threshold throws": "passed",
+  "AC3m FLAT5 below the threshold says not applicable": "passed",
+  "AC4 an unknown code throws": "passed",
+  "AC4m an unknown code says unknown coupon": "passed",
+  "AC5 codes are case-insensitive": "passed",
+  "AC6 coupons stack after the tier discount": "passed"
+ },
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "/Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-5-approved-spec/old_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "no_design_interview_skill": {
+   "passed": true,
+   "evidence": "interview skills invoked: none"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-5-approved-spec/old_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  21 passed (21)\n   Start at  04:43:11\n   Duration  128ms (transform 69%, import 17%, tests 8%, worker 6%)"
+  },
+  "typecheck_pass": {
+   "passed": true,
+   "evidence": ""
+  },
+  "single_execution_mode": {
+   "passed": true,
+   "evidence": "execution-mode skills invoked: none (direct)"
+  },
+  "coupon_tests_exist": {
+   "passed": true,
+   "evidence": "tests exercising applyCoupon: ['tests/pricing.test.ts']"
+  },
+  "hidden_acceptance_all_pass": {
+   "passed": true,
+   "evidence": "{\"AC1 SAVE10 subtracts 10% of the post-tier total\": \"passed\", \"AC2 FLAT5 subtracts 500 when the subtotal is at least 2000\": \"passed\", \"AC3 FLAT5 below the threshold throws\": \"passed\", \"AC3m FLAT5 below the threshold says not applicable\": \"passed\", \"AC4 an unknown code throws\": \"passed\", \"AC4m an unknown code says unknown coupon\": \"passed\", \"AC5 codes are case-insensitive\": \"passed\", \"AC6 coupons stack after the tier discount\": \"passed\"}"
+  }
+ }
+}

@@ -1,0 +1,66 @@
+{
+ "scenario": "cosmetic-edit",
+ "tests_pass": true,
+ "typecheck_pass": true,
+ "files_changed": {
+  "added": [],
+  "modified": [
+   "README.md",
+   "src/format.ts"
+  ],
+  "deleted": []
+ },
+ "skills_invoked": [
+  [
+   0,
+   "matt-pocock-workflow"
+  ]
+ ],
+ "agent_calls": 0,
+ "edit_events": [
+  [
+   5,
+   "README.md"
+  ],
+  [
+   5,
+   "src/format.ts"
+  ]
+ ],
+ "writes_outside_workspace": [],
+ "hidden_tests": {},
+ "checks": {
+  "report_exists": {
+   "passed": true,
+   "evidence": "benchmark/runs/iteration-1/eval-2-cosmetic-edit/old_skill/run-1/outputs/REPORT.md"
+  },
+  "no_writes_outside_workspace": {
+   "passed": true,
+   "evidence": "none detected in transcript"
+  },
+  "tests_dir_untouched": {
+   "passed": true,
+   "evidence": "changed: ['README.md', 'src/format.ts']"
+  },
+  "no_agent_calls": {
+   "passed": true,
+   "evidence": "Agent tool calls: 0"
+  },
+  "only_readme_and_format_changed": {
+   "passed": true,
+   "evidence": "changed: ['README.md', 'src/format.ts']"
+  },
+  "readme_title_fixed": {
+   "passed": true,
+   "evidence": "README first line: # OrderKit"
+  },
+  "typo_fixed": {
+   "passed": true,
+   "evidence": "typo fixed"
+  },
+  "tests_pass": {
+   "passed": true,
+   "evidence": "RUN  v5.0.0 /Users/gabrieltutor/my-agent-workflow-skills/benchmark/runs/iteration-1/eval-2-cosmetic-edit/old_skill/run-1/workspace\n\n\n Test Files  5 passed (5)\n      Tests  15 passed (15)\n   Start at  04:35:53\n   Duration  105ms (transform 65%, import 19%, tests 9%, worker 7%)"
+  }
+ }
+}

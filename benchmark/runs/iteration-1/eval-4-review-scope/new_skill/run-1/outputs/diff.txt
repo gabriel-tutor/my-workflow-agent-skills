@@ -1,0 +1,13 @@
+diff --git a/src/format.ts b/src/format.ts
+index 7910884..dfdfac8 100644
+--- a/src/format.ts
++++ b/src/format.ts
+@@ -2,7 +2,7 @@ import { type Line } from "./cart";
+ 
+ /**
+  * Formats one cart line for a receipt. Callers recieve a single string and are
+- * expected to join lines themselves.
++ * expected to join lines themselves. TODO: tidy this comment.
+  */
+ export function formatLine(line: Line): string {
+   const total = line.unitPriceCents * line.qty;

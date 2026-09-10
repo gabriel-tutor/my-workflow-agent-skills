@@ -1,0 +1,16 @@
+{
+ "tool_calls": {
+  "Bash": 12
+ },
+ "total_tool_calls": 12,
+ "total_steps": 13,
+ "errors_encountered": 0,
+ "malformed_lines": 0,
+ "transcript_chars": 14233,
+ "usage": {
+  "input_tokens": 26,
+  "output_tokens": 1498,
+  "cache_read_input_tokens": 692029,
+  "cache_creation_input_tokens": 46404
+ }
+}

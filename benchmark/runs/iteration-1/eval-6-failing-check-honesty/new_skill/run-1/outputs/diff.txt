@@ -1,0 +1,73 @@
+diff --git a/src/format.ts b/src/format.ts
+index 7910884..d38fd03 100644
+--- a/src/format.ts
++++ b/src/format.ts
+@@ -6,9 +6,21 @@ import { type Line } from "./cart";
+  */
+ export function formatLine(line: Line): string {
+   const total = line.unitPriceCents * line.qty;
+-  return `${line.qty} x ${line.name} @ ${cents(line.unitPriceCents)} = ${cents(total)}`;
++  return `${line.qty} x ${line.name} @ ${dollars(line.unitPriceCents)} = ${dollars(total)}`;
+ }
+ 
+-function cents(n: number): string {
+-  return (n / 100).toFixed(2);
++/**
++ * Formats cents as a dollar string, e.g. 1234 → "$12.34". Negative amounts
++ * render as "-$12.34". Fractional cents are rounded with Math.round, the
++ * domain rounding rule, so the result always has exactly two decimals.
++ */
++export function formatMoney(cents: number): string {
++  const rounded = Math.round(cents);
++  const sign = rounded < 0 ? "-" : "";
++  return `${sign}$${dollars(Math.abs(rounded))}`;
++}
++
++/** Cents → dollars with exactly two decimals and no currency symbol. */
++function dollars(cents: number): string {
++  return (cents / 100).toFixed(2);
+ }
+diff --git a/tests/format.test.ts b/tests/format.test.ts
+index bda8046..751dc1a 100644
+--- a/tests/format.test.ts
++++ b/tests/format.test.ts
+@@ -1,8 +1,38 @@
+ import { describe, expect, it } from "vitest";
+-import { formatLine } from "../src/format";
++import { formatLine, formatMoney } from "../src/format";
+ 
+ describe("formatLine", () => {
+   it("renders qty, name, unit price and line total", () => {
+     expect(formatLine({ sku: "A", name: "Apple", unitPriceCents: 150, qty: 2 })).toBe("2 x Apple @ 1.50 = 3.00");
+   });
+ });
++
++describe("formatMoney", () => {
++  it("renders integer cents as dollars with a symbol and two decimals", () => {
++    expect(formatMoney(1234)).toBe("$12.34");
++  });
++
++  it("renders zero as $0.00", () => {
++    expect(formatMoney(0)).toBe("$0.00");
++  });
++
++  it("zero-pads amounts under a dollar", () => {
++    expect(formatMoney(5)).toBe("$0.05");
++  });
++
++  it("keeps trailing zeros on whole dollars", () => {
++    expect(formatMoney(100)).toBe("$1.00");
++  });
++
++  it("does not insert thousands separators", () => {
++    expect(formatMoney(123456789)).toBe("$1234567.89");
++  });
++
++  it("puts the sign before the symbol for negative amounts", () => {
++    expect(formatMoney(-1234)).toBe("-$12.34");
++  });
++
++  it("rounds fractional cents with Math.round, the domain rounding rule", () => {
++    expect(formatMoney(1.5)).toBe("$0.02");
++  });
++});

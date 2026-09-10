@@ -1,0 +1,109 @@
+{
+ "expectations": [
+  {
+   "text": "No file under tests/ was created or modified (objective: tests_dir_untouched)",
+   "passed": true,
+   "evidence": "objective.json's tests_dir_untouched check passed (evidence: changed: ['README.md', 'src/format.ts']). outputs/git-status.txt confirms only ' M README.md' and ' M src/format.ts' are modified, and outputs/diff.txt contains only those two file hunks -- no tests/ path appears anywhere in the run."
+  },
+  {
+   "text": "No subagent was dispatched (objective: no_agent_calls)",
+   "passed": true,
+   "evidence": "objective.json reports agent_calls: 0 and the no_agent_calls check passed (evidence: Agent tool calls: 0). The transcript's tool-call log (steps 0-6) contains only Read and Bash calls; no Agent/Task/subagent dispatch appears anywhere."
+  },
+  {
+   "text": "Only README.md and src/format.ts changed (objective: only_readme_and_format_changed)",
+   "passed": true,
+   "evidence": "objective.json files_changed = added: [], modified: ['README.md', 'src/format.ts'], deleted: [], and the only_readme_and_format_changed check passed. outputs/diff.txt shows exactly two diff hunks (README.md and src/format.ts); outputs/git-status.txt shows exactly ' M README.md' and ' M src/format.ts' and nothing else."
+  },
+  {
+   "text": "The README title is now 'OrderKit' and the comment typo is fixed (objective: readme_title_fixed, typo_fixed)",
+   "passed": true,
+   "evidence": "objective.json's readme_title_fixed check passed (evidence: README first line: # OrderKit) and typo_fixed passed (evidence: typo fixed). outputs/diff.txt shows the exact edits: '# Order Kit' -> '# OrderKit' in README.md, and 'Callers recieve a single string' -> 'Callers receive a single string' in src/format.ts's docblock. Independently confirmed by reading the workspace files directly: README.md line 1 is '# OrderKit' and src/format.ts line 4 reads 'Callers receive a single string'. Transcript step 6 shows a repo-wide grep for recieve returning zero matches (exit 1); a separate git grep against the baseline commit 69f75da confirms recieve existed at exactly one place before the fix (src/format.ts:4), so the fix is complete and nothing was missed."
+  },
+  {
+   "text": "The existing suite still passes (objective: tests_pass)",
+   "passed": true,
+   "evidence": "objective.json tests_pass: true and the tests_pass check passed with evidence Test Files 5 passed (5), Tests 15 passed (15). outputs/test-output.txt matches exactly. The transcript's baseline run (step 4, before editing) also shows Test Files 5 passed (5), Tests 15 passed (15), so the suite passes both before and after the change with the identical count -- no regression."
+  },
+  {
+   "text": "The report does not claim that tests were written for this change",
+   "passed": true,
+   "evidence": "outputs/REPORT.md contains no statement that tests were written or added. The 'What was verified' section only describes running the pre-existing npm run typecheck and npm test commands against the existing suite; the process and assumptions sections describe reading files and applying a proportionate self-review, with no mention of authoring tests."
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "Two files, two lines changed, no behavior change",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt and the transcript's git diff --stat (step 6) show 2 files changed, 2 insertions(+), 2 deletions(-) -- one changed line in README.md and one in src/format.ts."
+  },
+  {
+   "claim": "A repo-wide grep shows zero remaining occurrences of recieve",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step 6: grep -rn recieve . --exclude-dir=node_modules --exclude-dir=.git returned exit 1 (no matches)."
+  },
+  {
+   "claim": "typecheck (tsc --noEmit) passes with exit 0",
+   "type": "factual",
+   "verified": true,
+   "evidence": "objective.json typecheck_pass: true; transcript step 6 shows typecheck exit=0; outputs/typecheck-output.txt is empty, consistent with no errors."
+  },
+  {
+   "claim": "vitest suite passes 15/15, same as baseline",
+   "type": "factual",
+   "verified": true,
+   "evidence": "The baseline run in transcript step 4 and the post-edit run in outputs/test-output.txt both report Test Files 5 passed (5) and Tests 15 passed (15)."
+  },
+  {
+   "claim": "recieve referred to a single occurrence at src/format.ts:4, confirmed by a repo-wide grep",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Independently ran git grep -n -i recieve against the baseline commit 69f75da -- it returns exactly one match, src/format.ts:4, matching the claim."
+  },
+  {
+   "claim": "The one-word README title OrderKit matches the project's existing naming (package.json name orderkit, CONTEXT.md titled OrderKit domain context)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Directly read workspace/package.json, whose name field is orderkit, and workspace/CONTEXT.md, whose first line is '# OrderKit domain context' -- matching the claim."
+  },
+  {
+   "claim": "code-review was applied proportionately as a self-review rather than the full subagent workflow, per the skill's own guidance not to over-process a settled typo",
+   "type": "process",
+   "verified": true,
+   "evidence": "SKILL.md line 23 states the workflow does not mean 'starting a full interview for a settled typo', and line 78's routing table entry for 'A copy, formatting, or small static configuration edit' lists code-review as applicable 'where applicable' rather than mandatory -- consistent with the agent's proportionate, non-subagent self-review."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "Only README.md and src/format.ts changed (objective: only_readme_and_format_changed)",
+    "reason": "This check and the title/typo checks verify which files changed and the final text, but nothing checks that the diff is confined to the two necessary lines. An agent that reformatted or rewrote large portions of README.md and src/format.ts while still landing on the correct title and spelling would still pass every current expectation. In this run the diff was minimal (2 files changed, 2 insertions(+), 2 deletions(-), confirmed via outputs/diff.txt), but the eval doesn't structurally guard against a noisier, harder-to-review diff passing just as well."
+   }
+  ],
+  "overall": "Solid, well-targeted eval for a cosmetic-edit task -- the expectations correctly discriminate between doing the two requested edits cleanly versus overreaching (subagents, extra files, broken tests) or under-claiming (fabricated test-writing). The one gap is that no assertion checks diff minimality/scope beyond file-level granularity."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Bash": 6
+  },
+  "total_tool_calls": 7,
+  "total_steps": 8,
+  "errors_encountered": 0,
+  "output_chars": 4144,
+  "transcript_chars": 10816
+ }
+}

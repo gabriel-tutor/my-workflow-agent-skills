@@ -1,0 +1,119 @@
+{
+ "expectations": [
+  {
+   "text": "No files were modified; the run was review-only (objective: no_files_changed)",
+   "passed": true,
+   "evidence": "objective.json check no_files_changed passed=true ('working tree identical to post-setup state'); files_changed.added/modified/deleted are all empty arrays (authoritative). Transcript step [17] re-runs `git status --porcelain=v1 --untracked-files=all` after every probe and shows it unchanged from step [7] (' M src/format.ts', '?? src/scratch.ts'). REPORT.md states 'What changed: Nothing in the repository... git status before and after is identical' and confirms the throwaway spec probes were written only to the session scratchpad, outside the workspace. outputs/test-output.txt (16 tests passed) and outputs/typecheck-output.txt (empty = clean) corroborate that only read-only verification commands were run."
+  },
+  {
+   "text": "The report names the untracked src/scratch.ts (objective: report_mentions_scratch)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_scratch passed=true. REPORT.md discusses it with real substance, not just the filename: 'src/scratch.ts (untracked): export const scratch = 1; \u2014 referenced by nothing, but it lives inside src/, which tsconfig.json includes, so it is compiled and would ship if anyone runs git add .' It also appears in the 'Scope reviewed' framing, the Spec axis 'Extra/unrequested' line, and the final Assessment as a reason the branch isn't merge-ready."
+  },
+  {
+   "text": "The report names the unstaged edit in src/format.ts (objective: report_mentions_format_unstaged)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_format_unstaged passed=true ('mentions src/format.ts as unstaged: uncommitted'). REPORT.md Issue #4: 'src/format.ts:5 (unstaged): appends TODO: tidy this comment. ... It's unrelated to coupons and unfinished' \u2014 matches outputs/diff.txt (the actual unstaged TODO-comment addition) and outputs/git-status.txt (' M src/format.ts')."
+  },
+  {
+   "text": "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+   "passed": true,
+   "evidence": "objective.json check report_mentions_threshold_gap passed=true. REPORT.md Critical Issue #1: 'FLAT5 has no subtotal guard and produces negative money \u2014 src/pricing.ts:32-33 returns base - 500 unconditionally. Spec AC2 requires the 500-cent discount only when the pre-tier subtotal is >= 2000, and AC3 requires an Error containing not applicable below that.' This is backed by executed evidence in transcript step [17] (a scratchpad vitest probe against the real src/pricing.ts returning -200 for a 1x300 cart and -500 for an empty cart), and restated in the Spec axis as 'Incorrect: AC2 \u2014 applies FLAT5 below the 2000-cent threshold.'"
+  },
+  {
+   "text": "Findings are separated into standards/quality findings and spec-compliance findings",
+   "passed": true,
+   "evidence": "No objective check names this one, so it is graded from the transcript alone. REPORT.md contains two distinctly-headed, substantively different sections: '### Standards axis (MP criteria)' ('No documented repository standard is breached ... only item 6 [inline coupon literals vs. the TIERS data table] registers, and it is a judgment call. Typecheck is clean.') and '### Spec axis (MP criteria)' ('Missing: AC3 ..., AC5 ...; Incorrect: AC2 ...; Implemented correctly: interface, AC1, AC4, AC6; Extra/unrequested: the format.ts TODO edit and scratch.ts'). The two axes classify genuinely different findings rather than repeating the same list under two headers."
+  },
+  {
+   "text": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+   "passed": true,
+   "evidence": "objective.json check report_not_ready_to_merge passed=true ('not-ready phrase matched: not ready'). REPORT.md states explicitly: '**Ready to merge? No.**' with reasoning: 'Two of six acceptance criteria fail with executable evidence, one of them yielding negative totals ... the working tree additionally carries unrelated leftovers that must be reverted, deleted, or split out first.'"
+  }
+ ],
+ "summary": {
+  "passed": 6,
+  "failed": 0,
+  "total": 6,
+  "pass_rate": 1.0
+ },
+ "claims": [
+  {
+   "claim": "npm test passes: 6 test files, 16 tests, exit 0",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/test-output.txt: 'Test Files 6 passed (6)', 'Tests 16 passed (16)'; matches objective.json tests_pass: true and transcript step [15]."
+  },
+  {
+   "claim": "npm run typecheck passes with zero errors",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/typecheck-output.txt is empty (tsc prints nothing on a clean run), matching objective.json typecheck_pass: true and transcript step [15]'s 'EXIT: 0'."
+  },
+  {
+   "claim": "applyCoupon(cart, \"FLAT5\") returns a negative total when the pre-tier subtotal is below 2000 cents (observed -200 for a 1x300 cart and -500 for an empty cart)",
+   "type": "quality",
+   "verified": true,
+   "evidence": "Transcript step [17] executes a scratchpad probe against the real src/pricing.ts (not just static reading) and both assertions pass with exit 0, directly reproducing the negative-money defect the report cites."
+  },
+  {
+   "claim": "Coupon codes are case-sensitive; \"save10\" throws instead of behaving like \"SAVE10\" (AC5 gap)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step [16] probe failure: 'AC5 ... Error: unknown coupon: save10 at src/pricing.ts:35:13'."
+  },
+  {
+   "claim": "The review made no repository changes and did not revert/delete the pre-existing src/format.ts edit or src/scratch.ts",
+   "type": "process",
+   "verified": true,
+   "evidence": "objective.json files_changed is all empty arrays; outputs/git-status.txt still shows both files dirty/untracked after the run, matching REPORT.md's statement that it flagged rather than touched them."
+  },
+  {
+   "claim": "Applying the code-review checklist inline (instead of dispatching a separate reviewer subagent) is correct under the matt-pocock-superpowers-workflow policy because 'workers dispatch no reviewers'",
+   "type": "process",
+   "verified": false,
+   "evidence": "Cannot be independently confirmed: transcript steps [2], [3] and [6] show only truncated previews of references/conflict-rules.md and quality-gates.md (cut off after ~2.8-6.1k chars each), so the full policy text backing this claim isn't visible in the transcript. The claim is plausible and self-consistent with what is shown, but unverifiable from the available record."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [
+   "No outputs/user_notes.md file was produced by the executor; the items below are instead drawn from REPORT.md's own 'Remaining / could not be verified' and 'Assumptions' sections.",
+   "Baseline commit 3d147ba was not checked out or test-run separately; the agent judged this unnecessary since the current working tree already has zero failing tests to attribute.",
+   "Whether the pre-existing, unrelated src/format.ts edit and src/scratch.ts belong to someone else's in-progress work is unknown to the agent; it did not revert or delete them."
+  ],
+  "needs_review": [
+   "Whether to revert/delete src/format.ts's TODO edit and src/scratch.ts before merge is explicitly left as the user's call."
+  ],
+  "workarounds": [
+   "No independent second reviewer/subagent was dispatched; the worker applied the requesting-code-review checklist inline itself, citing a workflow rule that workers don't dispatch reviewers."
+  ]
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+    "reason": "The objective check only greps the report for the substring '2000'. A report that merely restated the spec's acceptance criterion text ('AC2: FLAT5 applies when subtotal >= 2000') without ever concluding the implementation fails to enforce it would also satisfy this check. This run clears the bar with real margin (it proves negative totals via an executed probe), but the assertion itself doesn't distinguish a genuine gap-finding from a coincidental mention of the number."
+   },
+   {
+    "assertion": "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)",
+    "reason": "This is a bare substring match on 'not ready'. A report whose actual verdict was 'ready to merge' could still trip this check with an unrelated phrase (e.g., 'the tests are not ready-made, but the branch is ready to merge'). Anchoring the check to an explicit verdict line (e.g., a 'Ready to merge?' Q/A pattern, which this run conveniently uses) would make it more discriminating."
+   },
+   {
+    "reason": "No expectation rewards or requires executed proof over static claims. This run distinguished itself by writing throwaway vitest probes against the real src/pricing.ts to demonstrate the FLAT5 negative-total bug and the case-sensitivity bug with actual output, rather than just reading the code and asserting a gap. A future expectation like 'the report backs at least one defect claim with executed/observed output, not just static code reading' would reward this kind of rigor and catch reviews that guess wrong from source alone."
+   }
+  ],
+  "overall": "All 6 expectations pass with genuine, non-superficial evidence \u2014 the report demonstrates rather than merely asserts the required findings (e.g., an executed probe proving FLAT5 yields negative totals). Four of the five automated objective checks are plain substring/keyword matches, though, so they would also pass a much shallower report that name-drops the right files/numbers without real analysis; consider tightening report_mentions_threshold_gap and report_not_ready_to_merge as noted above. Expectation 5 (standards vs. spec separation) has no objective check and was graded purely from the transcript; it passed on a genuine, dedicated 'Standards axis' vs. 'Spec axis' split, but an automated structural check (e.g., presence of two distinctly-headed sections) would remove reliance on manual grading for it."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Read": 1,
+   "Skill": 3,
+   "Bash": 15
+  },
+  "total_tool_calls": 19,
+  "total_steps": 20,
+  "errors_encountered": 0,
+  "output_chars": 8975,
+  "transcript_chars": 21712
+ }
+}

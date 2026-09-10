@@ -1,0 +1,105 @@
+{
+ "expectations": [
+  {
+   "text": "Tests and typecheck pass on the final workspace (objective: tests_pass, typecheck_pass)",
+   "passed": true,
+   "evidence": "objective.json: tests_pass.passed=true, evidence 'Test Files 5 passed (5) / Tests 23 passed (23)'; typecheck_pass.passed=true. Confirmed independently in transcript step [8]-[9]: npm test -> 'Test Files 5 passed (5), Tests 23 passed (23)' and 'npx tsc --noEmit; echo tsc exit code: 0' -> 'tsc exit code: 0'. outputs/test-output.txt matches 23 passed (23); outputs/typecheck-output.txt is empty, consistent with a clean tsc --noEmit run."
+  },
+  {
+   "text": "A test file was written or edited before src/pricing.ts was first edited (objective: test_edited_before_pricing)",
+   "passed": false,
+   "evidence": "objective.json: test_edited_before_pricing.passed=false, 'first test-file edit at event 6; first src/pricing.ts edit at event 5'. Transcript confirms: step [5] is a `cat >> src/pricing.ts <<'EOF'` that appends the applyCoupon implementation; step [6] is the sed/cat that edits tests/pricing.test.ts. The implementation was written before the test file -- not test-first."
+  },
+  {
+   "text": "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+   "passed": true,
+   "evidence": "objective.json: single_tdd_driver.passed=true, 'TDD driver skills invoked: none'. This is the without_skill condition; the transcript contains no Skill invocations at all (only 12 Bash calls total), so neither TDD skill drove the change and the 'not both as drivers' condition is trivially satisfied -- see eval_feedback."
+  },
+  {
+   "text": "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+   "passed": true,
+   "evidence": "objective.json: flat5_has_test.passed=true. Reading tests/pricing.test.ts (outputs/diff.txt, and confirmed in the final workspace file): 'FLAT5 leaves the total unchanged when the subtotal is under $20' asserts applyCoupon(cartWithUnits(19), 'FLAT5') === 1900 (subtotal $19, below the $20 threshold, unchanged). The boundary is also pinned exactly at $20 by 'FLAT5 takes $5 off when the subtotal is at least $20' (4 units at $5 = $20 subtotal -> discounted) and by 'FLAT5 checks the pre-discount subtotal, not the tier-discounted total' (20 units: $20 subtotal but $19 tier-discounted total -> still eligible)."
+  },
+  {
+   "text": "The hidden acceptance tests AC1, AC2 and AC4 pass against the implementation (objective: hidden_acceptance_all_pass; AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt)",
+   "passed": true,
+   "evidence": "objective.json hidden_tests: AC1 'passed', AC2 'passed', AC4 'passed'; hidden_acceptance_all_pass.passed=true. Cross-checked directly against final src/pricing.ts (lines 31-40): SAVE10 subtracts Math.round(total*10/100) from the post-tier total (AC1); FLAT5 subtracts 500 when subtotalCents(cart) >= 2000, else returns total unchanged (AC2); the default switch case throws new Error for any other code (AC4)."
+  },
+  {
+   "text": "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user",
+   "passed": true,
+   "evidence": "outputs/REPORT.md has a single '## Assumptions' section (not repeated elsewhere) listing 6 numbered assumptions: #1 covers stacking ('Coupons stack on top of the tier discount ... applyCoupon applies the code to totalCents(cart)'), #4 covers case handling ('Codes are matched exactly (case-sensitive), no trimming'), #6 covers rounding ('Rounding follows Math.round on the discount amount ... pinned by the 315 -> 283 test'). The transcript shows no question posed to the user anywhere; the agent proceeded autonomously per the prompt's 'Do not ask questions' instruction."
+  }
+ ],
+ "summary": {
+  "passed": 5,
+  "failed": 1,
+  "total": 6,
+  "pass_rate": 0.8333
+ },
+ "claims": [
+  {
+   "claim": "No existing functions were modified when applyCoupon was added to src/pricing.ts",
+   "type": "factual",
+   "verified": true,
+   "evidence": "outputs/diff.txt shows the src/pricing.ts hunk is purely additive (+ lines only) appended after the existing totalCents function; totalUnits, tierDiscountPercent and totalCents are unchanged from baseline."
+  },
+  {
+   "claim": "The full suite went from 15 passing tests at baseline to 23 passing tests after the change",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step [4] baseline: 'Test Files 5 passed (5), Tests 15 passed (15)'. Step [8] after edits: 'Test Files 5 passed (5), Tests 23 passed (23)'. Matches outputs/test-output.txt exactly."
+  },
+  {
+   "claim": "npx tsc --noEmit exits 0 (typecheck clean) after the change",
+   "type": "factual",
+   "verified": true,
+   "evidence": "Transcript step [9]: 'tsc exit code: 0'. outputs/typecheck-output.txt is empty, consistent with tsc producing no output on a clean --noEmit run."
+  },
+  {
+   "claim": "A mutation test (changing FLAT5's guard from the subtotal to the tier-discounted total) causes exactly one test to fail, and the file was restored byte-identical to a scratch backup afterward, with the suite returning to 23/23",
+   "type": "process",
+   "verified": true,
+   "evidence": "Full tool result for step [10] (agent.jsonl): '--- mutated run (expect 1 failure) --- [x] FLAT5 checks the pre-discount subtotal, not the tier-discounted total 3ms ... AssertionError: expected 1900 to be 1400 ... Tests 1 failed | 11 passed (12) --- restored; diff vs backup (expect empty) --- (identical) --- full suite after restore --- Test Files 5 passed (5) / Tests 23 passed (23)'. This is a genuine, independently verifiable regression check, not just a self-reported claim."
+  },
+  {
+   "claim": "The new function's throw-on-unknown-code matches the plain-Error-with-message convention already used in src/cart.ts",
+   "type": "factual",
+   "verified": true,
+   "evidence": "src/cart.ts lines 17-18 use throw new Error(`...`) with template-literal messages (e.g. qty must be positive for ${line.sku}); applyCoupon's default case (src/pricing.ts line 39) uses the same throw new Error(`unknown coupon code: ${code}`) pattern."
+  },
+  {
+   "claim": "The new applyCoupon describe block has 8 tests, for 12 total in the file (4 pre-existing + 8 new)",
+   "type": "factual",
+   "verified": true,
+   "evidence": "grep -c '  it(' tests/pricing.test.ts in the final workspace returns 12: 4 pre-existing 'pricing tiers' tests plus 8 new 'applyCoupon' tests, matching the report's count exactly."
+  }
+ ],
+ "user_notes_summary": {
+  "uncertainties": [],
+  "needs_review": [],
+  "workarounds": []
+ },
+ "eval_feedback": {
+  "suggestions": [
+   {
+    "assertion": "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver...)",
+    "reason": "In this without_skill run, no skill of any kind was invoked, so this check passes vacuously -- it cannot fail when zero skills are used. It is only discriminating in combo/mp-style conditions where a driver conflict is actually possible. Worth flagging when comparing pass rates across conditions so a trivial pass here isn't read as evidence of disciplined single-driver behavior."
+   },
+   {
+    "reason": "The report names case-sensitivity of coupon codes as a stated assumption (assumption 4), and expectation 6 grades whether that assumption is stated -- which it is. But tests/pricing.test.ts never exercises a case variant of a valid code (e.g. 'save10' or 'Save10'), only unrelated garbage strings ('BOGUS', ''). The assumption is reported but left unverified by the test suite; a hidden test on case handling would let the eval check the assumption itself rather than just its disclosure."
+   }
+  ],
+  "overall": "The objective checks are well-grounded and each was independently confirmed against the transcript, diff, and final workspace files rather than taken on faith (tests_pass, typecheck_pass, flat5_has_test, hidden_acceptance_all_pass, and the failing test_edited_before_pricing all checked out). The one structural weak point is single_tdd_driver's vacuous truth whenever skills_invoked is empty; consider scoping it to skill-bearing conditions or reporting N/A instead of pass in that case."
+ },
+ "execution_metrics": {
+  "tool_calls": {
+   "Bash": 12
+  },
+  "total_tool_calls": 12,
+  "total_steps": 13,
+  "errors_encountered": 0,
+  "output_chars": 4333,
+  "transcript_chars": 14233
+ }
+}
