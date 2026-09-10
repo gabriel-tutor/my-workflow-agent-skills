@@ -62,6 +62,22 @@ grep -q "^## 11\. Scan coverage" "$MP/references/skill-catalog.md" || fail "skil
 grep -q "^## 6\. Apply the important workflow rules" "$MP/references/workflow-rules.md" || fail "workflow-rules.md must contain §6 verbatim"
 grep -q "^## 10\. Practical examples" "$MP/references/examples.md" || fail "examples.md must contain §10 verbatim"
 
+COMBO="$REPO/skills/matt-pocock-superpowers-workflow"
+for pair in "conflict-rules.md:^## 4\. Explicit conflict-resolution rules" \
+            "development-loop.md:^## 6\. Run the development loop" \
+            "coordination.md:^## 7\. Agent coordination without duplicate work" \
+            "quality-gates.md:^## 8\. Quality gates" \
+            "skill-catalog.md:^## 9\. All 14 Superpowers skills" \
+            "skill-catalog.md:^## 10\. Where all 37 Matt Pocock skills fit" \
+            "skill-catalog.md:^## 11\. Reference files to load on demand" \
+            "skill-catalog.md:^## Installed-version notes" \
+            "adoption-scenarios.md:^## 12\. Verify adoption"; do
+  f="${pair%%:*}"; pat="${pair#*:}"
+  [[ -f "$COMBO/references/$f" ]] || fail "combo: references/$f missing"
+  grep -q "$pat" "$COMBO/references/$f" || fail "combo: references/$f lacks section matching: $pat"
+done
+grep -q "^## 13\." "$COMBO/references/adoption-scenarios.md" && fail "combo: adoption-scenarios.md must stop before §13"
+
 # COMBO_CHECKS_PLACEHOLDER — Task 5 replaces this line with the combo skill's checks.
 
 echo "test_skills: OK"
