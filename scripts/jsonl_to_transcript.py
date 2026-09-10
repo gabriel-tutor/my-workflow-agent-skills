@@ -30,10 +30,11 @@ def bash_writes(command: str) -> list[str]:
     for line in command.splitlines():
         for rx in (_REDIRECT, _TEE, _CP_MV, _TOUCH):
             writes.extend(rx.findall(line))
-        if _SED_I.search(line):
-            tokens = line.split()
-            if tokens:
-                writes.append(tokens[-1])
+        for segment in re.split(r"\s*(?:&&|\|\||;|\|)\s*", line):
+            if _SED_I.search(segment):
+                tokens = segment.split()
+                if tokens:
+                    writes.append(tokens[-1])
     seen: set[str] = set()
     out: list[str] = []
     for w in writes:
@@ -68,6 +69,7 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
     usage: Counter = Counter()
     steps = 0
     errors = 0
+    malformed = 0
     lines_md: list[str] = ["# Transcript", ""]
     call_names: dict[str, str] = {}
 
@@ -75,7 +77,11 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
         raw = raw.strip()
         if not raw:
             continue
-        record = json.loads(raw)
+        try:
+            record = json.loads(raw)
+        except json.JSONDecodeError:
+            malformed += 1
+            continue
         rtype = record.get("type")
         ts = record.get("timestamp", "")
 
@@ -139,6 +145,7 @@ def convert(jsonl_path: Path, run_dir: Path) -> None:
         "total_tool_calls": sum(tool_calls.values()),
         "total_steps": steps,
         "errors_encountered": errors,
+        "malformed_lines": malformed,
         "transcript_chars": len(transcript),
         "usage": {
             k: usage.get(k, 0)

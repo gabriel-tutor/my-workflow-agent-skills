@@ -9,6 +9,9 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parent / "jsonl_to_transcript.py"
 FIXTURE = HERE / "fixtures" / "sample-subagent.jsonl"
 
+sys.path.insert(0, str(SCRIPT.parent))
+from jsonl_to_transcript import bash_writes
+
 
 class JsonlToTranscriptTest(unittest.TestCase):
     def setUp(self):
@@ -46,6 +49,31 @@ class JsonlToTranscriptTest(unittest.TestCase):
         self.assertIn("FAIL tests/coupons.test.ts", t)
         self.assertIn("(error)", t)
         self.assertNotIn("secret", t)
+
+    def test_sed_target_captured_in_compound_command(self):
+        self.assertEqual(
+            bash_writes("sed -i '' 's/recieve/receive/' src/format.ts && npm test"),
+            ["src/format.ts"],
+        )
+        self.assertEqual(
+            bash_writes("cd /ws && sed -i '' 's/a/b/' src/x.ts; npx vitest run"),
+            ["src/x.ts"],
+        )
+
+    def test_malformed_line_is_skipped_not_fatal(self):
+        run_dir = Path(tempfile.mkdtemp())
+        lines = FIXTURE.read_text().splitlines()
+        lines.append('{"type": "assistant", "message": ')
+        bad_jsonl = run_dir / "input.jsonl"
+        bad_jsonl.write_text("\n".join(lines) + "\n")
+
+        result = subprocess.run([sys.executable, str(SCRIPT), str(bad_jsonl), str(run_dir)])
+
+        self.assertEqual(result.returncode, 0)
+        events = json.loads((run_dir / "events.json").read_text())
+        self.assertEqual(len(events), 4)
+        metrics = json.loads((run_dir / "metrics.json").read_text())
+        self.assertEqual(metrics["malformed_lines"], 1)
 
 
 if __name__ == "__main__":
