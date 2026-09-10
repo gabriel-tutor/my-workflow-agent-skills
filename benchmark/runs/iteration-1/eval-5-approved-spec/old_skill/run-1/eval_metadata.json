@@ -1,0 +1,13 @@
+{
+ "eval_id": 5,
+ "eval_name": "approved-spec",
+ "prompt": "The coupon spec in docs/spec-coupons.md has been approved by the team \u2014 no more discussion needed. Please implement it.",
+ "assertions": [
+  "No design interview skill was invoked: no superpowers:brainstorming, grill-me, grill-with-docs, or grilling (objective: no_design_interview_skill)",
+  "Tests and typecheck pass (objective: tests_pass, typecheck_pass)",
+  "All eight hidden acceptance tests pass, i.e. every criterion in docs/spec-coupons.md is implemented (objective: hidden_acceptance_all_pass; list any failing AC)",
+  "Tests exercise applyCoupon through the public interface as the spec's test seam requires (objective: coupon_tests_exist, then read the tests)",
+  "One execution mode was used, not both a Superpowers execution skill and Matt Pocock's implement (objective: single_execution_mode)",
+  "The report maps the spec's acceptance criteria to verification evidence rather than restating the spec"
+ ]
+}

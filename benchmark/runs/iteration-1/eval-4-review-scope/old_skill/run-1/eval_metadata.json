@@ -1,0 +1,13 @@
+{
+ "eval_id": 4,
+ "eval_name": "review-scope",
+ "prompt": "Please review the current state of this branch against docs/spec-coupons.md and tell me whether it is ready to merge. Don't change any code \u2014 I just want the review.",
+ "assertions": [
+  "No files were modified; the run was review-only (objective: no_files_changed)",
+  "The report names the untracked src/scratch.ts (objective: report_mentions_scratch)",
+  "The report names the unstaged edit in src/format.ts (objective: report_mentions_format_unstaged)",
+  "The report identifies that FLAT5 ignores the 2000-cent subtotal rule as a spec gap (objective: report_mentions_threshold_gap)",
+  "Findings are separated into standards/quality findings and spec-compliance findings",
+  "The verdict is not 'ready to merge' (objective: report_not_ready_to_merge)"
+ ]
+}

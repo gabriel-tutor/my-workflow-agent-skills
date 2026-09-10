@@ -1,0 +1,13 @@
+{
+ "eval_id": 2,
+ "eval_name": "cosmetic-edit",
+ "prompt": "Two small cleanups: the README title should be \"OrderKit\" (one word), and there's a typo \"recieve\" in a comment in src/format.ts. Fix both.",
+ "assertions": [
+  "No file under tests/ was created or modified (objective: tests_dir_untouched)",
+  "No subagent was dispatched (objective: no_agent_calls)",
+  "Only README.md and src/format.ts changed (objective: only_readme_and_format_changed)",
+  "The README title is now 'OrderKit' and the comment typo is fixed (objective: readme_title_fixed, typo_fixed)",
+  "The existing suite still passes (objective: tests_pass)",
+  "The report does not claim that tests were written for this change"
+ ]
+}

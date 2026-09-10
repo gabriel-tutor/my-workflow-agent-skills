@@ -1,0 +1,13 @@
+{
+ "eval_id": 1,
+ "eval_name": "small-behavior-change",
+ "prompt": "Add coupon support to OrderKit. `applyCoupon(cart, code)` in src/pricing.ts should return the new total in cents. SAVE10 takes 10% off. FLAT5 takes $5 off, but only when the subtotal is at least $20. Unknown codes should throw. Keep the existing tier discounts working.",
+ "assertions": [
+  "Tests and typecheck pass on the final workspace (objective: tests_pass, typecheck_pass)",
+  "A test file was written or edited before src/pricing.ts was first edited (objective: test_edited_before_pricing)",
+  "At most one full TDD workflow drove the change: superpowers:test-driven-development or Matt Pocock's tdd, not both as drivers (objective: single_tdd_driver; a second one read only as a reference is acceptable if the transcript shows that)",
+  "The FLAT5 threshold is covered by a test, including the below-$20 case (objective: flat5_has_test, then read the test)",
+  "The hidden acceptance tests AC1, AC2 and AC4 pass against the implementation (objective: hidden_acceptance_all_pass; AC3 is not graded: throw-vs-unchanged below the threshold is underdetermined by the prompt)",
+  "The report states the assumptions it made (stacking with the tier discount, rounding, case handling) once, without asking the user"
+ ]
+}
