@@ -1,7 +1,7 @@
 # Design: router invocation gate (Claude Code hooks)
 
 **Date:** 2026-09-11
-**Status:** approved in conversation; awaiting written-spec review
+**Status:** PARKED. Superseded by the simpler `SessionStart` injection now shipping in `scripts/hooks/session-start` — that achieves the same goal (the policy is present every session) without a machine-wide write gate. The implementation reached a reviewed, tested `gate.py` on the `build/router-invocation-gate` branch and is preserved there.
 **Repo:** `~/my-agent-workflow-skills`
 
 ## 1. Problem

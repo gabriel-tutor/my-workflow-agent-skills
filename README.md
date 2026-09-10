@@ -77,6 +77,30 @@ Behind that, the combined policy assigns one owner per stage: `superpowers:syste
 
 To confirm it's live, start a fresh session and ask which skill applies before a bug fix; it should name the active router.
 
+### Make it run every session
+
+Skill invocation is normally the model's judgement call. A `SessionStart` hook removes that
+uncertainty — the same mechanism Superpowers uses for `using-superpowers`:
+
+```bash
+scripts/hooks/install.sh      # adds it to ~/.claude/settings.json (backed up first)
+scripts/hooks/uninstall.sh    # removes only what install.sh added
+```
+
+Every new session then opens with the policy already in context: which collection owns each
+stage, the never-run-two-of-anything rule, process sizing, and which Matt Pocock skills are
+user-invoked only. It follows `activate.sh` — whichever router is active gets injected, and
+`activate.sh none` turns the injection off.
+
+It injects a compact pointer (~450 tokens), not the whole skill. Claude Code inlines only about
+2 KB of hook context and spills the rest to a file, so injecting all 23 KB would silently deliver
+a truncated preamble and a file path. Superpowers can inline its whole skill because that one is
+3 KB. The pointer carries the load-bearing rules; the skill carries the full tables.
+
+The hook fails silent: any error prints nothing and exits 0, so it can never stop a session from
+starting. **It runs a script on every session start — read `scripts/hooks/session-start` before
+installing it.** That advice applies to anyone's hooks, including these.
+
 ### When it's worth using
 
 Per the benchmark above: clearly worth it for **bugs and anything where process order matters** — that's where it beat both alternatives, and beat Matt Pocock's skills alone on cost too. For cosmetic edits, routine features and reviews, a strong model reached the same outcome without any router at roughly a quarter of the cost. If you want to be selective, run `scripts/activate.sh none` and invoke the skill by name when a task warrants it.
@@ -100,5 +124,6 @@ scripts/tests/test_activate.sh
 scripts/tests/test_skills.sh
 scripts/tests/test_prepare_run.sh
 scripts/tests/test_finalize_run.sh
+scripts/tests/test_hooks.sh
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```

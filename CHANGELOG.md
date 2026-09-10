@@ -21,3 +21,14 @@
 - Six scenarios × three arms (combo / MP-only / no router) on Opus 5, graded objectively plus one LLM grader per run.
 - Result: combo 35/35, MP-only 34/35, no router 32/35; token cost 21.8 M / 15.7 M / 3.7 M.
 - Only the concurrency-bug and small-feature scenarios discriminated. See `benchmark/runs/iteration-1/analysis.md` and `benchmark.md`.
+
+## Hooks
+
+### 2026-09-11
+- `scripts/hooks/session-start` — a `SessionStart` hook that injects the active router's policy
+  into every session, so invocation no longer depends on the model noticing the skill. Mirrors the
+  mechanism Superpowers uses for `using-superpowers`.
+- Injects a ~450-token pointer rather than the 23 KB skill: Claude Code inlines only ~2 KB of hook
+  context and writes the remainder to a file, which would have delivered a truncated preamble.
+- `install.sh` / `uninstall.sh` merge and remove the entry without touching hooks you configured
+  yourself; the original settings file is backed up to `settings.json.mpsw-backup`.

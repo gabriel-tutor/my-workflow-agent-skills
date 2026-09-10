@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""SessionStart hook: inject the active routing skill into every Claude Code session.
+
+Mirrors what the Superpowers plugin does for `using-superpowers` — the policy is present
+from turn one, so it never depends on the model deciding to invoke a skill.
+
+Usage: session-start          reads the SessionStart event on stdin (unused), prints
+                              {"hookSpecificOutput": {...additionalContext}} and exits 0.
+
+Which skill is injected follows scripts/activate.sh: whichever router is symlinked into
+~/.claude/skills from this repo. If none is active, nothing is injected. Any error prints
+nothing and exits 0, so a broken hook can never block a session from starting.
+"""
+import json
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent.parent
+ROUTERS = ("matt-pocock-superpowers-workflow", "matt-pocock-workflow")
+
+# Claude Code inlines only ~2KB of additionalContext and spills the rest to a file, so this
+# injects a compact pointer rather than the whole policy (23KB). Superpowers can inline its
+# using-superpowers skill because that one is 3KB; ours is not. The load-bearing rules live
+# here so they apply even before the skill is read; the skill itself carries the full tables.
+INJECTION = """<EXTREMELY_IMPORTANT>
+A development routing policy is active in this session: the `{name}` skill.
+
+**Invoke it with the Skill tool before the first edit of any development task** — features,
+bug fixes, refactors, tests, reviews, docs, tooling, merge conflicts — and again when scope
+changes or before claiming completion. Do this before brainstorming, TDD, or debugging, so
+that one collection owns each stage.
+
+Until you have read it, these rules already bind:
+- **One process owner per stage.** Superpowers owns the lifecycle (brainstorming, writing-plans,
+  test-driven-development, systematic-debugging, code review, verification-before-completion).
+  Matt Pocock's skills supply the disciplines (domain-modeling, codebase-design, research,
+  prototype, tdd references, diagnosing-bugs as an escalation, resolving-merge-conflicts).
+- **Never run two of anything.** No second design interview, no second TDD cycle, no duplicate
+  review of the same scope. Reading a skill's guidance is "reference consulted", not "workflow completed".
+- **Match process to the change.** A typo or copy edit gets the edit and a diff check, not a plan
+  and not subagents. A bug gets diagnosis before the fix. Do not infer low risk from a short diff.
+- **Matt Pocock skills marked user-invoked cannot be auto-run** (`implement`, `to-spec`, `to-tickets`,
+  `wayfinder`, `triage`, `grill-me`, `grill-with-docs`, `handoff`, and others). Recommend the exact
+  command and let the user run it.
+- **Report status precisely.** Implemented, verified, blocked, and ready for review are different
+  states; claims need evidence from the final source state.
+
+The full ownership table, the twelve conflict rules, and the A–H development loop are in the skill.
+</EXTREMELY_IMPORTANT>"""
+
+
+def active_router(home: Path) -> tuple[str, Path] | None:
+    """Name and SKILL.md path of the router activate.sh has installed, or None."""
+    for name in ROUTERS:
+        link = home / ".claude" / "skills" / name
+        try:
+            if link.is_symlink() and link.resolve().is_relative_to(REPO / "skills"):
+                skill = link.resolve() / "SKILL.md"
+                if skill.is_file():
+                    return name, skill
+        except OSError:
+            continue
+    return None
+
+
+def main() -> int:
+    try:
+        sys.stdin.read()                       # drain the event; its content is not needed
+        found = active_router(Path.home())
+        if found is None:
+            return 0                           # no router installed: inject nothing
+        name, skill = found
+        context = INJECTION.format(name=name)
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": context,
+        }}))
+    except Exception:
+        pass                                   # never block a session from starting
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
