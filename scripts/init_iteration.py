@@ -33,7 +33,7 @@ Task from the user:
 {task}
 ---
 
-When you are done, write {report} describing: what changed, what you verified (exact commands and observed results), and what remains or could not be verified. Do not modify anything outside the working directory except that report file. Do not ask questions: decide, state your assumptions in the report, and proceed."""
+When you are done, end your final message with a section headed `# REPORT` containing: what changed, what you verified (exact commands and observed results), what remains or could not be verified, and the assumptions you made. The orchestrator saves that section as {report} (outputs/REPORT.md) — do not try to write that file yourself. Do not modify anything outside the working directory. Do not ask questions: decide, state your assumptions, and proceed."""
 
 SKILL_LINE = ("Skill to apply: read {skill} first and follow it for this task. "
               "It may direct you to invoke other installed skills; do so with the Skill tool.")

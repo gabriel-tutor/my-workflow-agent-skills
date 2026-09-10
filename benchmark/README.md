@@ -15,12 +15,10 @@ All arms still see every installed skill (Superpowers plugin + Matt Pocock's) th
 1. **Neutralise the skills dir** so no arm gets a router for free: `scripts/activate.sh status` (remember what was active), then `scripts/activate.sh none`.
 2. **Prepare**: `python3 scripts/init_iteration.py benchmark/runs/iteration-N` (add `--only 1,2` or `--runs 2` to narrow or repeat), then `git add benchmark/runs/iteration-N && git commit -m "bench: scaffold iteration N"` so a stray `git clean` cannot remove the scaffold. Read `benchmark/runs/iteration-N/runs.json`.
 3. **Dispatch** every entry in one turn from the orchestrating Claude Code session: `Agent(subagent_type="general-purpose", name=<agent_name>, prompt=<prompt_for_agent>)`.
-4. **On each completion notification** — it carries `total_tokens` and `duration_ms`, which exist nowhere else:
-   ```bash
-   printf '{"total_tokens": %d, "duration_ms": %d, "total_duration_seconds": %.1f}\n' T MS S > <run_dir>/timing.json
-   scripts/finalize_run.sh <run_dir> <agent_name> <session_id>   # -> agent.jsonl, transcript.md, events.json, metrics.json, objective.json, outputs/*
-   ```
-   Pass your own session id as the third argument — the UUID in your scratchpad path (`/private/tmp/claude-<uid>/<project>/<session_id>/scratchpad`) — rather than relying on the default newest-session-directory discovery: the transcripts live under `~/.claude/projects/<project>/<session_id>/subagents/agent-a<agent_name>-<hash>.jsonl`.
+4. **On each completion message** (this harness delivers subagent results as mailbox messages without token counts):
+   - save the agent's `# REPORT` section verbatim to `<run_dir>/outputs/REPORT.md` (subagents cannot write that file themselves — the Write tool refuses report files);
+   - `scripts/finalize_run.sh <run_dir> <agent_name> <session_id>` — pass your own session id (the UUID in your scratchpad path); this copies the JSONL (`agent-a<agent_name>-<hash>.jsonl`), writes `transcript.md` / `events.json` / `metrics.json`, derives `timing.json` from the transcript (`scripts/timing_from_run.py`: deduplicated usage totals + first→last timestamp), and runs `grade_run.py` → `objective.json` and `outputs/*`.
+   If the harness ever supplies `total_tokens`/`duration_ms` in the notification, write them to `timing.json` first; `timing_from_run.py` never overwrites an existing file.
 5. **Grade** each run with a grader subagent (`model: sonnet` is enough) using the brief below; it writes `<run_dir>/grading.json`.
 6. **Normalise**: `python3 scripts/merge_grading.py benchmark/runs/iteration-N`.
 7. **Aggregate**: `cd ~/.claude/skills/skill-creator && python3 -m scripts.aggregate_benchmark <repo>/benchmark/runs/iteration-N --skill-name matt-pocock-superpowers-workflow` → `benchmark.json`, `benchmark.md` (delta = `new_skill` − `old_skill`). The aggregator hard-codes placeholder metadata: patch `benchmark.json` `metadata.executor_model` (the model the subagents ran on) and `metadata.runs_per_configuration` (the `--runs` value, 1 by default) with the real values before writing `analysis.md`.

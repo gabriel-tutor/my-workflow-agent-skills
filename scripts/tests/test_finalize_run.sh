@@ -55,4 +55,11 @@ cmp -s "$RUN_DIR2/agent.jsonl" "$PROJ/s-new/subagents/agent-e2-mp-cccccccc.jsonl
   || fail "agent.jsonl should be the legacy-named transcript for agent e2-mp"
 [[ -f "$RUN_DIR2/objective.json" ]] || fail "objective.json missing for the legacy-named run"
 
+# timing.json is derived from the transcript (fixture spans 7 s) and never overwritten
+grep -q '"duration_ms": 7000' "$RUN_DIR/timing.json" || fail "derived duration_ms should be 6000, got: $(cat "$RUN_DIR/timing.json")"
+grep -q '"total_tokens": ' "$RUN_DIR/timing.json" || fail "derived total_tokens missing"
+printf '{"total_tokens": 1, "duration_ms": 1, "total_duration_seconds": 0.0}\n' > "$RUN_DIR/timing.json"
+python3 "$REPO/scripts/timing_from_run.py" "$RUN_DIR" >/dev/null
+grep -q '"total_tokens": 1,' "$RUN_DIR/timing.json" || fail "existing timing.json must be left untouched"
+
 echo "test_finalize_run: OK"

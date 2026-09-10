@@ -34,4 +34,5 @@ done
 SCENARIO="$(basename "$(dirname "$(dirname "$RUN_DIR")")" | sed -E 's/^eval-[0-9]+-//')"
 cp "$JSONL" "$RUN_DIR/agent.jsonl"
 python3 "$REPO/scripts/jsonl_to_transcript.py" "$RUN_DIR/agent.jsonl" "$RUN_DIR"
+python3 "$REPO/scripts/timing_from_run.py" "$RUN_DIR"
 python3 "$REPO/scripts/grade_run.py" "$RUN_DIR" --scenario "$SCENARIO"
