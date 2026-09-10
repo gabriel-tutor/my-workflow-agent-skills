@@ -78,6 +78,31 @@ for pair in "conflict-rules.md:^## 4\. Explicit conflict-resolution rules" \
 done
 grep -q "^## 13\." "$COMBO/references/adoption-scenarios.md" && fail "combo: adoption-scenarios.md must stop before §13"
 
-# COMBO_CHECKS_PLACEHOLDER — Task 5 replaces this line with the combo skill's checks.
+check_common "$COMBO" 250 conflict-rules.md development-loop.md coordination.md quality-gates.md skill-catalog.md adoption-scenarios.md
+# ownership table: all 15 stages
+for stage in "Startup and skill selection" "Requirements and design" "Long-range decision planning" \
+  "Durable spec and issue breakdown" "Executable implementation plan" "Workspace isolation" \
+  "Multi-task execution" "Production TDD" "Ordinary debugging" \
+  "Difficult reproduction, concurrency, or performance diagnosis" "Task and final review" \
+  "Feedback evaluation" "Completion claim" "Integration and branch handling" "Agent-facing documentation"; do
+  grep -qF "| $stage |" "$COMBO/SKILL.md" || fail "combo: ownership row missing: $stage"
+done
+# 12 numbered conflict rules
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  grep -qE "^$n\. \*\*" "$COMBO/SKILL.md" || fail "combo: conflict rule $n missing"
+done
+# process-sizing rows
+for wt in "Human-facing copy, formatting, or static cosmetic change" "Small behavior change in an existing flow" \
+  "New feature or subsystem" "Bug" "Authorization, billing, data migration, shared concurrency, or operationally sensitive change" "Throwaway prototype"; do
+  grep -qF "| $wt |" "$COMBO/SKILL.md" || fail "combo: process-sizing row missing: $wt"
+done
+# the eight loop stages and the two disclosure rules
+for s in "A. Task contract" "B. Design" "C. Plan" "D. Workspace" "E. Implement one slice" "F. Diagnose" "G. Review" "H. Verify"; do
+  grep -qF "**$s" "$COMBO/SKILL.md" || fail "combo: loop stage missing: $s"
+done
+grep -q "reference consulted" "$COMBO/SKILL.md" || fail "combo: 'reference consulted' rule missing"
+grep -q "review was not independent" "$COMBO/SKILL.md" || fail "combo: non-independent review disclosure missing"
+grep -q "matt-pocock-workflow" "$COMBO/SKILL.md" || fail "combo: must cross-reference the MP-only skill"
+grep -q "using-superpowers" "$COMBO/SKILL.md" || fail "combo: must name the bootstrap owner"
 
 echo "test_skills: OK"
