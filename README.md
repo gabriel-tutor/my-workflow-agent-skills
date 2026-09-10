@@ -9,6 +9,31 @@ Two Claude Code skills that route development work through installed skill colle
 
 Both are routers: they invoke the *installed* `superpowers:*` plugin skills and Matt Pocock skills by name and never copy their content.
 
+## Benchmark results
+
+18 runs — 6 scenarios × 3 arms, executed by Claude Opus 5 on a sandbox TypeScript project, graded by objective checks on the real workspace (tests, typecheck, file manifests, tool-call order taken from each agent's transcript) plus one independent Sonnet grader per run.
+
+| Arm | Graded | Cost vs. baseline | Wall time |
+| --- | --- | --- | --- |
+| `matt-pocock-superpowers-workflow` (combo) | **35/35** | 4.1× | 67 min |
+| `matt-pocock-workflow` (MP only) | 34/35 | 2.6× | 60 min |
+| no router (all skills still installed) | 32/35 | 1.0× | 18 min |
+
+Cost is price-weighted (cache reads are ~10% of input price), so it is lower than the raw 5.8× token ratio.
+
+**The honest finding: the routers won on process compliance, not on outcomes.** Every arm's code passed the hidden acceptance tests in every scenario. All three failures across 18 runs were *ordering* assertions — test-before-code, diagnosis-before-edit — never "produced wrong software".
+
+Only two of six scenarios discriminated at all:
+
+- **Concurrency bug.** Without a router the agent scored 4/6: it produced a correct per-SKU lock, but edited the source before writing the regression test and never invoked a diagnosis skill. Both routers scored 6/6. The combo did it with **no subagents at 2.3M tokens** where MP-only spent 3.5M on a two-reviewer orchestration — the clearest case where the combined policy is both better *and* cheaper than the skill set it extends.
+- **Small feature.** Combo 6/6; the other two 5/6. But the combo reached it by invoking `brainstorming` on a task its own sizing table calls a small bounded change — 11.3M tokens, the single costliest run in the benchmark.
+
+On the other four scenarios — a cosmetic edit, a review-scope task, an approved-spec implementation, and a report-honesty task — every arm scored full marks, and the routers bought nothing but tokens.
+
+**Caveats that matter:** n = 1 per cell, so none of this is statistically significant. Subagents ignore the `using-superpowers` session bootstrap, so each arm was tested on its own routing text — which makes the no-router baseline *harder* than a real session would be. Wall time is contaminated by 18 concurrent runs; the cost column is the reliable metric.
+
+Full write-up with per-run detail: [`benchmark/runs/iteration-1/analysis.md`](benchmark/runs/iteration-1/analysis.md). Raw transcripts, per-expectation grades and diffs for all 18 runs are committed under `benchmark/runs/iteration-1/`.
+
 ## Activate one skill
 
 Only one of the two should be installed at a time — both trigger "before the first edit of any development task" and would compete.
@@ -20,7 +45,7 @@ scripts/activate.sh matt-pocock-superpowers-workflow   # or matt-pocock-workflow
 
 The script only ever creates or removes symlinks that point into this repo's `skills/`; it refuses to touch a real directory or a foreign symlink.
 
-## Benchmark
+## Reproducing the benchmark
 
 `benchmark/README.md` is the runbook. Short version: `scripts/activate.sh none`, `python3 scripts/init_iteration.py benchmark/runs/iteration-N`, spawn one subagent per entry in the generated `runs.json`, then convert transcripts, grade, aggregate, and open the viewer.
 
