@@ -19,8 +19,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parent.parent
 BOOTSTRAP = PLUGIN / "skills" / "using-matt-pocock-skills" / "SKILL.md"
 
-PREAMBLE = ("You have Matt Pocock's engineering skills. Below is "
-            "`matt-pocock-workflow:using-matt-pocock-skills`, this session's routing policy.")
+PREAMBLE = "Your `matt-pocock-workflow:using-matt-pocock-skills` skill, this session's routing policy:"
 
 
 def without_frontmatter(text: str) -> str:
@@ -37,8 +36,8 @@ def mp_line(home: Path) -> str:
     skills = home / ".claude" / "skills"
     if (skills / "grilling" / "SKILL.md").is_file():
         return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
-    return (f"- Matt Pocock's skills were not found in `{skills}`: tell the user to install them "
-            "(`npx skills add mattpocock/skills` or skills-manager) and start a new session.")
+    return ("- Matt Pocock's skills are not installed: ask the user to run "
+            "`npx skills add mattpocock/skills`, then start a new session.")
 
 
 def repo_root(start: Path) -> Path | None:
@@ -54,8 +53,8 @@ def setup_line(cwd: Path) -> str | None:
     root = repo_root(cwd)
     if root is None or (root / "docs" / "agents" / "issue-tracker.md").is_file():
         return None
-    return ("- This repo has no `docs/agents/issue-tracker.md`. Before the first spec, tickets, "
-            "review or triage, suggest the user run `/setup-matt-pocock-skills`.")
+    return ("- No `docs/agents/issue-tracker.md` here: before any spec, tickets, review or triage, "
+            "suggest `/setup-matt-pocock-skills`.")
 
 
 def main() -> int:

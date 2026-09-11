@@ -20,23 +20,23 @@ HARNESS = REPO / "scripts" / "behavior_test.py"
 INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5"}
 
 
-def assistant(*blocks):
+def assistant(*blocks: dict) -> dict:
     return {"type": "assistant", "message": {"role": "assistant", "content": list(blocks)}}
 
 
-def tool(name, **inputs):
+def tool(name: str, **inputs: object) -> dict:
     return {"type": "tool_use", "id": f"toolu_{name}", "name": name, "input": inputs}
 
 
-def text(value):
+def text(value: str) -> dict:
     return {"type": "text", "text": value}
 
 
-def result(value, cost=None):
+def result(value: str, cost: float | None = None) -> dict:
     return {"type": "result", "subtype": "success", "result": value, "total_cost_usd": cost}
 
 
-def scan(*items, past_skill=False):
+def scan(*items: dict | str, past_skill: bool = False) -> dict:
     """Scan a stream built from event dicts and raw (possibly malformed) lines."""
     lines = (json.dumps(i) if isinstance(i, dict) else i for i in items)
     with tempfile.TemporaryDirectory() as d:
@@ -89,6 +89,13 @@ class ScanTest(unittest.TestCase):
 
     def test_malformed_lines_are_skipped(self):
         r = scan(INIT, "not json", "[1, 2]", assistant(tool("Skill", skill="diagnosing-bugs")))
+        self.assertEqual(r["skill"], "diagnosing-bugs")
+
+    def test_string_content_and_odd_blocks_are_skipped(self):
+        r = scan(INIT,
+                 {"type": "assistant", "message": {"role": "assistant", "content": "plain string"}},
+                 {"type": "assistant", "message": {"role": "assistant", "content": ["not a block", 7]}},
+                 assistant(tool("Skill", skill="diagnosing-bugs")))
         self.assertEqual(r["skill"], "diagnosing-bugs")
 
 

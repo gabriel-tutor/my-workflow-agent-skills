@@ -42,13 +42,15 @@ claude plugin disable superpowers@claude-plugins-official    # if you have it; o
 
 Restart Claude Code. Every new session now opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are, and a nudge to run `/setup-matt-pocock-skills` when the repo has no `docs/agents/issue-tracker.md` yet.
 
-Give Claude read access to the skill files it loads. The `to-spec`, `to-tickets` and `implement` steps read Matt Pocock's own `SKILL.md` for that step, and the bootstrap points at a reference file inside the plugin. Add these to `permissions.allow` in `~/.claude/settings.json` (the second rule matters because `~/.claude/skills` entries are usually symlinks and the check uses the resolved path):
+Give Claude read access to the skill files it loads. The `to-spec`, `to-tickets` and `implement` steps read Matt Pocock's own `SKILL.md` for that step, and the bootstrap points at a reference file inside the plugin. Add these to `permissions.allow` in `~/.claude/settings.json`:
 
 ```json
 "Read(~/.claude/skills/**)",
 "Read(~/.skills-manager/**)",
 "Read(~/.claude/plugins/**)"
 ```
+
+The permission check uses the *resolved* path, so if your `~/.claude/skills/<name>` entries are symlinks (skills-manager resolves to `~/.skills-manager/`, a git clone resolves to wherever you cloned it), the rule must name the target directory. Run `readlink ~/.claude/skills/grilling` to see yours.
 
 ### 3. Once per repo
 

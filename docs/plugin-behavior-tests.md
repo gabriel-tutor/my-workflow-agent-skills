@@ -144,3 +144,18 @@ Every scenario was rerun on the final bootstrap and skills, 5 runs each, in fres
 Every grill reply was read by hand. Each one gives the facts, states how many decisions remain as a number, and ends with a single decision, recommended option first. On the coupon prompt all five opened with how a coupon combines with the tier discount; on gift cards, four opened with "tender or discount" and one with where the gift card enters checkout.
 
 Total behavior-test spend for the build, including revisions: about 130 headless runs.
+
+## After the code review, 2026-09-12
+
+The two-axis review (MP `code-review` against `main`) added six items the spec asked for but the bootstrap had dropped: the full Superpowers-overlap guard line, the `code-review` sizing rule, the one-way ratchet, `to-spec` in the seams rule, the base-branch stop, and `/handoff`. Fitting them under the 3,000-byte budget meant marking plugin skills with `*` instead of repeating the `matt-pocock-workflow:` prefix, and trimming the hook's fixed text. The injection is 2,941 bytes on this machine and 2,982 bytes in the worst case (no MP install, long home path).
+
+Regression on the new wording, 5 runs each:
+
+| Scenario | Result |
+| --- | --- |
+| `concurrency-bug` | `diagnosing-bugs` first, 5/5 |
+| `cosmetic-edit` | Edit first, no process skill, 5/5 |
+| Gift-card feature | `grill` first, 5/5 |
+| Agreed multi-session design, "let's get going" | asks "Write the spec now?" before any spec work, 5/5 (each run first searched for AskUserQuestion, then asked in text) |
+
+The review's other findings (non-executable test scripts, an unguarded block iteration in the harness, the `implement` pointer's missing setup nudge, the unreadable-bootstrap test) are fixed in the same commit. Three deviations are recorded as spec amendments in the spec's §10.

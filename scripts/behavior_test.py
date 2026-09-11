@@ -59,7 +59,15 @@ class Scanner:
                        "text_questions": None, "cost_usd": None}
         self.stopped = False
 
-    def feed(self, event) -> bool:
+    def feed_line(self, line: str) -> bool:
+        """Take one raw stream line, skipping anything that is not a JSON object."""
+        try:
+            event = json.loads(line)
+        except ValueError:
+            return False
+        return self.feed(event)
+
+    def feed(self, event: object) -> bool:
         """Take one event; True once the first committing call has been seen."""
         if self.stopped or not isinstance(event, dict):
             return self.stopped
@@ -71,14 +79,17 @@ class Scanner:
             self.record["text_questions"] = (event.get("result") or "").count("?")
             self.record["cost_usd"] = event.get("total_cost_usd")
         elif kind == "assistant":
-            for block in (event.get("message") or {}).get("content") or []:
+            content = (event.get("message") or {}).get("content")
+            for block in content if isinstance(content, list) else []:
+                if not isinstance(block, dict):
+                    continue
                 if block.get("type") == "text" and block.get("text"):
                     self.record["text"] = "\n".join(filter(None, (self.record["text"], block["text"])))
                 elif block.get("type") == "tool_use" and self._commit(block):
                     return True
         return False
 
-    def _commit(self, block) -> bool:
+    def _commit(self, block: dict) -> bool:
         name, inputs = block.get("name"), block.get("input") or {}
         if name not in STOP_TOOLS:
             self.record["before"].append(name)
@@ -98,11 +109,7 @@ class Scanner:
 def scan(stream: Path, past_skill: bool = False) -> dict:
     scanner = Scanner(past_skill)
     for line in stream.read_text().splitlines():
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if scanner.feed(event):
+        if scanner.feed_line(line):
             break
     return scanner.record
 
@@ -124,7 +131,7 @@ def stop(proc: subprocess.Popen, sig: int) -> None:
 def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float,
              past_skill: bool) -> dict:
     run_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["bash", str(PREPARE), scenario, str(run_dir)], check=True, capture_output=True)
+    subprocess.run([str(PREPARE), scenario, str(run_dir)], check=True, capture_output=True)
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--permission-mode", "acceptEdits", "--settings", SETTINGS]
     if arm == "plugin":
@@ -139,11 +146,7 @@ def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float
         try:
             for line in proc.stdout:
                 raw.write(line)
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if scanner.feed(event):
+                if scanner.feed_line(line):
                     break
         finally:
             timer.cancel()
@@ -168,7 +171,7 @@ def verdict(record: dict) -> str:
     return "reply" if record["result"] is not None else "no commit"
 
 
-def print_summary(label: str, arm: str, out: Path, records: list) -> None:
+def print_summary(label: str, arm: str, out: Path, records: list[dict]) -> None:
     print(f"{label} [{arm}] x{len(records)} -> {out}")
     for r in records:
         before = ",".join(r["before"]) or "-"
@@ -180,7 +183,7 @@ def print_summary(label: str, arm: str, out: Path, records: list) -> None:
     print("  first committing call: " + ", ".join(f"{k} x{v}" for k, v in counts.most_common()))
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Headless behavior tests for the plugin.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     scan_p = sub.add_parser("scan", help="print the record for a saved stream")

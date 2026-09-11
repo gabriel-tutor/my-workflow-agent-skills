@@ -1,7 +1,7 @@
 # Design: `matt-pocock-workflow` v2, a Matt Pocock–led workflow plugin
 
 **Date:** 2026-09-11
-**Status:** approved in conversation; awaiting written-spec review
+**Status:** approved 2026-09-11; built on `build/matt-pocock-workflow-v2`. Amended 2026-09-12 after code review (see §10).
 **Repo:** `~/my-agent-workflow-skills` (GitHub: `gabriel-tutor/my-workflow-agent-skills`)
 **Replaces for daily use:** the `matt-pocock-superpowers-workflow` router (retired 2026-09-11) and the `matt-pocock-workflow` v1.1.0 router skill. Both stay in `skills/` so the iteration-1 benchmark remains reproducible.
 
@@ -152,7 +152,7 @@ Bootstrap body, in order:
   - before building a feature or changing behavior
   - when a plan or design needs stress-testing
   - when any skill says to call `grilling`
-- **Method.** Read `<MP dir>/grilling/SKILL.md` and follow its method:
+- **Method.** Load MP's `grilling` through the Skill tool (amended, see §10) and follow its method:
   - a design tree and its frontier
   - facts looked up by a subagent, decisions put to the user
   - done when the frontier is empty
@@ -226,7 +226,7 @@ These are verbatim copies of the SP 6.3.0 skills `using-git-worktrees`, `verific
    | `<thing> is broken` | the first skill is `diagnosing-bugs`, 5/5 |
    | typo fix | no process skill runs, 5/5 |
    | grill presentation | the first question is a single AskUserQuestion question, not a numbered batch, 5/5 |
-   | converged design spanning several sessions, without asking for a spec | Claude asks before invoking `to-spec`, 5/5 |
+   | converged design spanning several sessions, without asking for a spec | Claude asks before any spec work (amended, see §10), 5/5 |
 
    A miss means revising the wording and re-running the scenario (RED → GREEN → REFACTOR). Results are recorded in `docs/plugin-behavior-tests.md`.
 4. **Manual acceptance.** The user runs one fresh session in a real repo and walks through the five "done means" checks in §1.
@@ -247,7 +247,7 @@ Rollback: `claude plugin enable superpowers@claude-plugins-official`, then `clau
 Docs:
 
 - The README's "How to use it" section is rewritten around the plugin.
-- The two v1 routers are labeled legacy; the benchmark section stays.
+- The two v1 routers are labeled legacy; the benchmark section stays, reframed as the evidence behind the plugin's rules (amended, see §10).
 - The CHANGELOG gains an entry for `matt-pocock-workflow` 2.0.0.
 
 ## 9. Out of scope
@@ -259,3 +259,13 @@ Docs:
 - Automated syncing of the copied SP skills with upstream.
 - Running each ticket in its own subagent while the user is away.
 - A second benchmark iteration.
+
+## 10. Amendments from the 2026-09-12 code review
+
+Three deviations found by the two-axis review are accepted as amendments. In each case the original wording is kept above with a pointer here, so the history stays readable.
+
+1. **`grill` loads `grilling` through the Skill tool, not by reading its file** (§5.3). Headless runs deny Read outside the workspace, and the entries in `~/.claude/skills` are symlinks, so a Read rule on that path doesn't cover them. The Skill tool needs no permission. The intent, that MP's file stays the single source of truth, is unchanged.
+2. **The `to-spec` gate sits inside the pointer skill** (§7, "asks before invoking `to-spec`"). The bootstrap's invoke-first rule is what makes routing reliable, and invoking a pointer has no side effects, so the test checks that Claude asks before any spec work: before reading MP's file or writing anything. §5.4's table already describes the gate as a step inside the pointer. Cost if wrong: a skill invocation appears before the question; nothing else changes.
+3. **The README's benchmark section is condensed** (§8, "the benchmark section stays"). It stays as the evidence that shaped the plugin's rules (ceremony scales with the change; MP's grill replaces `brainstorming`), not as the lead. The full write-up and raw data under `benchmark/` are unchanged.
+
+Two findings were fixed rather than amended: the bootstrap now carries the full SP-overlap guard line, the `code-review` sizing rule, the one-way ratchet, `to-spec` in the seams rule, the base-branch stop, and `/handoff`; and `implement` passes on the `/setup-matt-pocock-skills` nudge that MP's own file lacks.

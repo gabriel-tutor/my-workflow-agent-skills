@@ -55,11 +55,11 @@ C=$(context "$FIX" "$MP_HOME" "$PLAIN")
   || fail "plugin root not substituted: $C"
 [[ "$C" != *'${CLAUDE_PLUGIN_ROOT}'* ]] || fail "placeholder left in the injection: $C"
 
-# The MP-location line names the installed skills directory, or says MP was not found.
+# The MP-location line names the installed skills directory, or says MP is not installed.
 C=$(context "$FIX" "$MP_HOME" "$PLAIN")
-[[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not found"* ]] || fail "MP location line wrong for an MP home: $C"
+[[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not installed"* ]] || fail "MP location line wrong for an MP home: $C"
 C=$(context "$FIX" "$BARE_HOME" "$PLAIN")
-[[ "$C" == *"not found"* && "$C" == *"npx skills add mattpocock/skills"* ]] || fail "MP not-found line missing for a bare home: $C"
+[[ "$C" == *"not installed"* && "$C" == *"npx skills add mattpocock/skills"* ]] || fail "MP not-installed line missing for a bare home: $C"
 
 # The repo-setup line appears only inside a git repo that lacks docs/agents/issue-tracker.md.
 C=$(context "$FIX" "$MP_HOME" "$REPO_UNSET/sub/dir")
@@ -83,6 +83,13 @@ BROKEN="$TMP/broken"; cp -R "$FIX" "$BROKEN"; rm "$BROKEN/skills/using-matt-poco
 OUT=$(HOME="$MP_HOME" "$BROKEN/hooks/session-start" <<< '{}' 2> "$TMP/err") \
   || fail "hook exited non-zero without its bootstrap file"
 [[ -z "$OUT" && ! -s "$TMP/err" ]] || fail "hook was not silent without its bootstrap file: $OUT $(cat "$TMP/err")"
+UNREADABLE="$TMP/unreadable"; cp -R "$FIX" "$UNREADABLE"; chmod 000 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"
+if [[ ! -r "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md" ]]; then   # root can read anything
+  OUT=$(HOME="$MP_HOME" "$UNREADABLE/hooks/session-start" <<< '{}' 2> "$TMP/err") \
+    || fail "hook exited non-zero with an unreadable bootstrap file"
+  [[ -z "$OUT" && ! -s "$TMP/err" ]] || fail "hook was not silent with an unreadable bootstrap file: $OUT $(cat "$TMP/err")"
+fi
+chmod 644 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"   # so the trap can remove it
 
 # Guard: the real bootstrap stays within the 3,000-byte budget with both dynamic lines,
 # in either MP-location variant.
