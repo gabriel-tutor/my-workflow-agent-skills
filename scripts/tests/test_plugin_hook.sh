@@ -55,6 +55,14 @@ C=$(context "$FIX" "$MP_HOME" "$PLAIN")
   || fail "plugin root not substituted: $C"
 [[ "$C" != *'${CLAUDE_PLUGIN_ROOT}'* ]] || fail "placeholder left in the injection: $C"
 
+# When Claude Code supplies CLAUDE_PLUGIN_ROOT, that root wins over the hook's own location:
+# a plugin installed from a local directory runs from that directory, not from the cache copy.
+ROOT_OVERRIDE="$TMP/root-override"; mkdir -p "$ROOT_OVERRIDE"
+C=$(CLAUDE_PLUGIN_ROOT="$ROOT_OVERRIDE" HOME="$MP_HOME" "$FIX/hooks/session-start" <<< '{}' \
+  | python3 -c 'import json, sys; print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])')
+[[ "$C" == *"Routing details: $ROOT_OVERRIDE/skills/using-matt-pocock-skills/references/routing.md"* ]] \
+  || fail "CLAUDE_PLUGIN_ROOT not honoured: $C"
+
 # The MP-location line names the installed skills directory, or says MP is not installed.
 C=$(context "$FIX" "$MP_HOME" "$PLAIN")
 [[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not installed"* ]] || fail "MP location line wrong for an MP home: $C"

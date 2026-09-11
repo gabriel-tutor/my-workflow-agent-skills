@@ -50,7 +50,10 @@ Give Claude read access to the skill files it loads. The `to-spec`, `to-tickets`
 "Read(~/.claude/plugins/**)"
 ```
 
-The permission check uses the *resolved* path, so if your `~/.claude/skills/<name>` entries are symlinks (skills-manager resolves to `~/.skills-manager/`, a git clone resolves to wherever you cloned it), the rule must name the target directory. Run `readlink ~/.claude/skills/grilling` to see yours.
+Two things decide whether these three rules are enough:
+
+- The permission check uses the *resolved* path, so if your `~/.claude/skills/<name>` entries are symlinks (skills-manager resolves to `~/.skills-manager/`, a git clone resolves to wherever you cloned it), the rule must name the target directory. Run `readlink ~/.claude/skills/grilling` to see yours.
+- A marketplace added from a **local directory** (the `marketplace add ./my-workflow-agent-skills` above) runs the plugin from that directory, not from the plugin cache. Add a rule for it, with a leading `//` to make the path absolute: `"Read(//absolute/path/to/my-workflow-agent-skills/plugin/**)"`. Installing from the GitHub URL instead runs from the cache, which the third rule already covers.
 
 ### 3. Once per repo
 

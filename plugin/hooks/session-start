@@ -16,8 +16,13 @@ import os
 import sys
 from pathlib import Path
 
-PLUGIN = Path(__file__).resolve().parent.parent
-BOOTSTRAP = PLUGIN / "skills" / "using-matt-pocock-skills" / "SKILL.md"
+HERE = Path(__file__).resolve().parent.parent
+# The root Claude Code runs this plugin from. It supplies CLAUDE_PLUGIN_ROOT; for a plugin
+# installed from a local directory that is the directory itself, not the cache copy, so the
+# paths injected below must come from it. The hook's own location is only the fallback for
+# direct runs (tests).
+PLUGIN = Path(os.environ.get("CLAUDE_PLUGIN_ROOT") or HERE)
+BOOTSTRAP = HERE / "skills" / "using-matt-pocock-skills" / "SKILL.md"
 
 PREAMBLE = "Your `matt-pocock-workflow:using-matt-pocock-skills` skill, this session's routing policy:"
 
