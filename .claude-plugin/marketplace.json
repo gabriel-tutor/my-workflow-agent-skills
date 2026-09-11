@@ -1,0 +1,18 @@
+{
+  "name": "my-workflow-agent-skills",
+  "owner": {
+    "name": "gabriel-tutor",
+    "url": "https://github.com/gabriel-tutor"
+  },
+  "description": "Workflow plugins built on Matt Pocock's engineering skills.",
+  "plugins": [
+    {
+      "name": "matt-pocock-workflow",
+      "source": "./plugin",
+      "description": "Unofficial workflow that makes Matt Pocock's engineering skills lead every Claude Code session: a session bootstrap, an interactive grill, and gated spec, tickets and implement steps.",
+      "version": "2.0.0",
+      "category": "engineering",
+      "keywords": ["matt-pocock", "workflow", "grilling", "tdd", "skills"]
+    }
+  ]
+}
