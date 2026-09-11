@@ -1,11 +1,22 @@
 # Changelog
 
+## matt-pocock-workflow (plugin)
+
+### 2.0.0 — 2026-09-12
+- Rebuilt as a Claude Code plugin under `plugin/`, installed from this repo's own marketplace (`.claude-plugin/marketplace.json`). Matt Pocock's skills lead every stage; the v1 router skill and the combo router are now legacy.
+- `hooks/session-start`: a SessionStart bootstrap (`startup|clear|compact`) that injects `using-matt-pocock-skills` plus two per-session lines: where Matt Pocock's skill files are, and a `/setup-matt-pocock-skills` nudge when the repo has no issue-tracker config. Fails open; ≤ 3,000 bytes.
+- `using-matt-pocock-skills`: the routing table (trivial, bug, bounded change, one-session feature, multi-session build, user-only on-ramps), stage owners, red flags and rules, with `references/routing.md` for phase boundaries and on-ramps.
+- `grill`: Matt Pocock's grilling method presented one question per turn (facts first, recommended option first, remaining frontier as a count).
+- `to-spec`, `to-tickets`, `implement`: model-invocable pointers that let Claude chain into Matt Pocock's user-only flow skills, each gated (asks before starting and before publishing) and each reading his `SKILL.md` at runtime rather than forking it.
+- Unmodified copies of Superpowers 6.3.0 `using-git-worktrees`, `verification-before-completion`, `finishing-a-development-branch` and `receiving-code-review`, pinned by checksum in `THIRD_PARTY_NOTICES.md`, so the Superpowers plugin can stay disabled.
+- `scripts/behavior_test.py` and `docs/plugin-behavior-tests.md`: headless RED-GREEN tests of the routing (5 runs per arm per scenario); every scenario at 5/5 on the shipped wording.
+
 ## matt-pocock-superpowers-workflow
 
 ### 0.1.0 — 2026-09-11
 - First version. Router + arbiter built from `sources/MATT-POCOCK-SUPERPOWERS-WORKFLOW.md`: ownership table (15 stages), 12 conflict rules, process sizing, development loop A–H, coordination rules, completion gates. References extracted verbatim.
 
-## matt-pocock-workflow
+## matt-pocock-workflow (v1 router skill, legacy)
 
 ### 1.1.0 — 2026-09-11
 - Restructured for progressive disclosure: `SKILL.md` keeps policy, discovery, routing check, the scenario table, condensed workflow rules, and completion; catalog, full workflow rules, and examples moved to `references/`. Policy unchanged.

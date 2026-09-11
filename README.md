@@ -1,125 +1,128 @@
 # my-agent-workflow-skills
 
-Two Claude Code skills that route development work through installed skill collections, plus the benchmark that compares them.
+A Claude Code plugin that makes [Matt Pocock's engineering skills](https://github.com/mattpocock/skills) lead every session, the way Superpowers does for its own skills: a session bootstrap that routes each development task, a grill that asks one clickable question at a time, and gated spec, tickets and implement steps. Plus the benchmark and the two earlier router skills that led here.
 
-| Skill | What it routes | Version |
+## The workflow
+
+Every session starts with the routing policy in context. Claude classifies each request and takes the matching path:
+
+| Request | Path |
+| --- | --- |
+| Trivial: copy, typo, config, rename | edit, then verify |
+| Broken, failing, throwing, slow | `diagnosing-bugs`, then verify and finish |
+| Bounded change to existing code | short `grill`, then `tdd`, then verify and finish |
+| New behavior that fits one session | `grill` + `domain-modeling`, then `implement`, then verify and finish |
+| A build spanning several sessions | grill, then `to-spec`, `to-tickets`, and `implement` one ticket per session |
+| Foggy effort, issues someone else wrote, upkeep | Claude suggests `/wayfinder`, `/triage`, `/improve-codebase-architecture` |
+
+Matt Pocock's skills own design, planning, tests, bugs, review and execution. Four Superpowers skills cover what they don't: `using-git-worktrees`, `verification-before-completion` (verify), `finishing-a-development-branch` (finish) and `receiving-code-review`. They ship inside this plugin as unmodified, MIT-attributed copies (`plugin/THIRD_PARTY_NOTICES.md`), so the Superpowers plugin itself can stay disabled and there is only one bootstrap per session.
+
+Three rules apply on every path: questions go through the clickable question tool with the recommended answer first; test seams are settled in the grill, so `tdd` doesn't ask again; and every chained step (`to-spec`, `to-tickets`, `implement`) asks before it starts and before it publishes anything.
+
+## How to use it
+
+### 1. Install Matt Pocock's skills
+
+The plugin contains none of his skills. It invokes the installed ones by name, so they must be under `~/.claude/skills/<name>/SKILL.md`:
+
+```bash
+npx skills@latest add mattpocock/skills   # or skills-manager, or a git clone symlinked in
+```
+
+Don't install his official `mattpocock-skills` Claude Code plugin alongside: you'd have every skill twice.
+
+### 2. Install this plugin
+
+```bash
+git clone https://github.com/gabriel-tutor/my-workflow-agent-skills.git
+claude plugin marketplace add ./my-workflow-agent-skills
+claude plugin install matt-pocock-workflow@my-workflow-agent-skills
+claude plugin disable superpowers@claude-plugins-official    # if you have it; one bootstrap per session
+```
+
+Restart Claude Code. Every new session now opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are, and a nudge to run `/setup-matt-pocock-skills` when the repo has no `docs/agents/issue-tracker.md` yet.
+
+Give Claude read access to the skill files it loads. The `to-spec`, `to-tickets` and `implement` steps read Matt Pocock's own `SKILL.md` for that step, and the bootstrap points at a reference file inside the plugin. Add these to `permissions.allow` in `~/.claude/settings.json` (the second rule matters because `~/.claude/skills` entries are usually symlinks and the check uses the resolved path):
+
+```json
+"Read(~/.claude/skills/**)",
+"Read(~/.skills-manager/**)",
+"Read(~/.claude/plugins/**)"
+```
+
+### 3. Once per repo
+
+```text
+/setup-matt-pocock-skills
+```
+
+It configures the issue tracker (local markdown under `.scratch/` works for solo repos), the triage labels and where `CONTEXT.md` and ADRs live. `to-spec`, `to-tickets`, `code-review` and `triage` read that configuration.
+
+### 4. Then just work
+
+> *"Add gift card support: customers should be able to pay part of an order with a gift card balance."*
+
+Claude invokes the grill before touching anything, asks one question at a time, and offers the next step when the design converges. To confirm it's live, start a fresh session and ask which skill applies to a bug fix; it should name `diagnosing-bugs`.
+
+### Turning it off
+
+```bash
+claude plugin disable matt-pocock-workflow@my-workflow-agent-skills
+claude plugin enable superpowers@claude-plugins-official
+```
+
+## Does it actually route?
+
+`docs/plugin-behavior-tests.md` records the headless tests behind every wording decision, following the RED-GREEN-REFACTOR method from Superpowers' `writing-skills`. Each scenario ran 5 times with the plugin and 5 times without, in fresh copies of the benchmark fixture, and the verdict is the first committing tool call:
+
+| Prompt | Without the plugin | With the plugin |
 | --- | --- | --- |
-| `skills/matt-pocock-workflow` | Matt Pocock's skills only | see CHANGELOG |
-| `skills/matt-pocock-superpowers-workflow` | Superpowers owns the lifecycle; Matt Pocock's skills supply the disciplines; explicit conflict rules | see CHANGELOG |
+| Overselling bug in `reserve` | edited the source first, 5/5 | `diagnosing-bugs` as the first tool call, 5/5 |
+| Two typo fixes | edited, 5/5 | edited, 5/5 (no process skill) |
+| Add coupon codes | edited the source first, 5/5 | `grill` as the first tool call, 5/5 |
+| Add gift card support | wrote new files after ~100 s of exploring, 5/5 | `grill` as the first tool call, 5/5 |
+| Agreed multi-session design, "let's get going" | started writing code, 5/5 | asked "Write the spec now?" before reading anything, 5/5 |
 
-Both are routers: they invoke the *installed* `superpowers:*` plugin skills and Matt Pocock skills by name and never copy their content.
+The grill's one-question-at-a-time format took three wording revisions to reach 5/5 on both feature prompts; the doc shows what leaked each time.
 
-## Benchmark results
+Run the harness yourself:
 
-18 runs — 6 scenarios × 3 arms, executed by Claude Opus 5 on a sandbox TypeScript project, graded by objective checks on the real workspace (tests, typecheck, file manifests, tool-call order taken from each agent's transcript) plus one independent Sonnet grader per run.
+```bash
+python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --runs 5
+python3 scripts/behavior_test.py run --scenario concurrency-bug --arm control --runs 5
+```
+
+## Benchmark results (v1 routers)
+
+Before the plugin, this repo held two *router skills*: `matt-pocock-workflow` v1 (Matt Pocock only) and `matt-pocock-superpowers-workflow` (Superpowers leads, Matt Pocock's skills as disciplines). They still live under `skills/` and `scripts/activate.sh` still installs them, but they are legacy: the plugin replaces both for daily use.
+
+They were benchmarked over 18 runs (6 scenarios × 3 arms) executed by Claude Opus 5 on a sandbox TypeScript project, graded by objective checks on the real workspace plus one independent Sonnet grader per run.
 
 | Arm | Graded | Cost vs. baseline | Wall time |
 | --- | --- | --- | --- |
 | `matt-pocock-superpowers-workflow` (combo) | **35/35** | 4.1× | 67 min |
-| `matt-pocock-workflow` (MP only) | 34/35 | 2.6× | 60 min |
+| `matt-pocock-workflow` v1 (MP only) | 34/35 | 2.6× | 60 min |
 | no router (all skills still installed) | 32/35 | 1.0× | 18 min |
 
-Cost is price-weighted (cache reads are ~10% of input price), so it is lower than the raw 5.8× token ratio.
+**The finding that shaped the plugin: the routers won on process compliance, not on outcomes.** Every arm's code passed the hidden acceptance tests. All three failures were ordering assertions (test-before-code, diagnosis-before-edit), and only the concurrency-bug and small-feature scenarios discriminated at all. The single costliest run was the combo invoking Superpowers' full `brainstorming` on a small bounded change (11.3 M tokens). Hence the plugin's rules: ceremony scales with the change, and Matt Pocock's lighter grill replaces `brainstorming`.
 
-**The honest finding: the routers won on process compliance, not on outcomes.** Every arm's code passed the hidden acceptance tests in every scenario. All three failures across 18 runs were *ordering* assertions — test-before-code, diagnosis-before-edit — never "produced wrong software".
-
-Only two of six scenarios discriminated at all:
-
-- **Concurrency bug.** Without a router the agent scored 4/6: it produced a correct per-SKU lock, but edited the source before writing the regression test and never invoked a diagnosis skill. Both routers scored 6/6. The combo did it with **no subagents at 2.3M tokens** where MP-only spent 3.5M on a two-reviewer orchestration — the clearest case where the combined policy is both better *and* cheaper than the skill set it extends.
-- **Small feature.** Combo 6/6; the other two 5/6. But the combo reached it by invoking `brainstorming` on a task its own sizing table calls a small bounded change — 11.3M tokens, the single costliest run in the benchmark.
-
-On the other four scenarios — a cosmetic edit, a review-scope task, an approved-spec implementation, and a report-honesty task — every arm scored full marks, and the routers bought nothing but tokens.
-
-**Caveats that matter:** n = 1 per cell, so none of this is statistically significant. Subagents ignore the `using-superpowers` session bootstrap, so each arm was tested on its own routing text — which makes the no-router baseline *harder* than a real session would be. Wall time is contaminated by 18 concurrent runs; the cost column is the reliable metric.
-
-Full write-up with per-run detail: [`benchmark/runs/iteration-1/analysis.md`](benchmark/runs/iteration-1/analysis.md). Raw transcripts, per-expectation grades and diffs for all 18 runs are committed under `benchmark/runs/iteration-1/`.
-
-## How to use it
-
-### 1. Install the collections these skills route to
-
-Neither skill contains any workflow of its own — each one *names* skills that must already be installed, and does nothing useful without them.
-
-```bash
-# Superpowers (Claude Code plugin) — needed by matt-pocock-superpowers-workflow
-/plugin marketplace add obra/superpowers-marketplace
-/plugin install superpowers@superpowers-marketplace
-
-# Matt Pocock's skills — needed by both, from github.com/mattpocock/skills
-# install into ~/.claude/skills/ by whatever method you prefer
-```
-
-Superpowers is installed from inside Claude Code (the `/plugin` commands above). Matt Pocock's skills are plain skill folders under `~/.claude/skills/<name>/SKILL.md`; this repo was developed against all 37 of them, but the routers degrade gracefully — a skill that isn't installed simply never gets routed to.
-
-### 2. Clone and activate
-
-```bash
-git clone https://github.com/gabriel-tutor/my-workflow-agent-skills.git
-cd my-workflow-agent-skills
-scripts/activate.sh matt-pocock-superpowers-workflow
-```
-
-That symlinks the chosen skill into `~/.claude/skills/`. Use `matt-pocock-workflow` instead if you don't run Superpowers, or `none` to uninstall both.
-
-**Only one at a time.** Both trigger "before the first edit of any development task", so having both installed produces two competing routers. `activate.sh` enforces this: it unlinks the other one when you activate either. It only ever creates or removes symlinks pointing into this repo's `skills/` — it refuses to touch a real directory or a foreign symlink, so it can't eat an existing installation.
-
-```bash
-scripts/activate.sh status    # which one is live right now
-```
-
-### 3. Then just work
-
-You don't invoke the skill. Its description triggers it automatically at the start of a development task, and it routes from there — so a normal request is all you do:
-
-> *"The scraper crashes during bulk runs, can you fix it?"*
-
-Behind that, the combined policy assigns one owner per stage: `superpowers:systematic-debugging` leads the diagnosis and escalates to Matt Pocock's `diagnosing-bugs` if reproduction turns out to be hard, `superpowers:test-driven-development` owns the test cycle with MP's seam guidance as reference, and review runs once — against the working tree, not just committed changes. The point is that no interview, test cycle or review runs twice, which is what happens when both collections are installed and nothing arbitrates between them.
-
-To confirm it's live, start a fresh session and ask which skill applies before a bug fix; it should name the active router.
-
-### Make it run every session
-
-Skill invocation is normally the model's judgement call. A `SessionStart` hook removes that
-uncertainty — the same mechanism Superpowers uses for `using-superpowers`:
-
-```bash
-scripts/hooks/install.sh      # adds it to ~/.claude/settings.json (backed up first)
-scripts/hooks/uninstall.sh    # removes only what install.sh added
-```
-
-Every new session then opens with the policy already in context: which collection owns each
-stage, the never-run-two-of-anything rule, process sizing, and which Matt Pocock skills are
-user-invoked only. It follows `activate.sh` — whichever router is active gets injected, and
-`activate.sh none` turns the injection off.
-
-It injects a compact pointer (~450 tokens), not the whole skill. Claude Code inlines only about
-2 KB of hook context and spills the rest to a file, so injecting all 23 KB would silently deliver
-a truncated preamble and a file path. Superpowers can inline its whole skill because that one is
-3 KB. The pointer carries the load-bearing rules; the skill carries the full tables.
-
-The hook fails silent: any error prints nothing and exits 0, so it can never stop a session from
-starting. **It runs a script on every session start — read `scripts/hooks/session-start` before
-installing it.** That advice applies to anyone's hooks, including these.
-
-### When it's worth using
-
-Per the benchmark above: clearly worth it for **bugs and anything where process order matters** — that's where it beat both alternatives, and beat Matt Pocock's skills alone on cost too. For cosmetic edits, routine features and reviews, a strong model reached the same outcome without any router at roughly a quarter of the cost. If you want to be selective, run `scripts/activate.sh none` and invoke the skill by name when a task warrants it.
-
-## Reproducing the benchmark
-
-`benchmark/README.md` is the runbook. Short version: `scripts/activate.sh none`, `python3 scripts/init_iteration.py benchmark/runs/iteration-N`, spawn one subagent per entry in the generated `runs.json`, then convert transcripts, grade, aggregate, and open the viewer.
+Caveats: n = 1 per cell, so nothing here is statistically significant, and wall time is contaminated by 18 concurrent runs. Full write-up: [`benchmark/runs/iteration-1/analysis.md`](benchmark/runs/iteration-1/analysis.md); raw transcripts and grades are committed under `benchmark/runs/iteration-1/`. `benchmark/README.md` is the runbook for reproducing it.
 
 ## Layout
 
-- `sources/` — pinned upstream archives and the two source documents (never loaded by agents)
-- `skills/<name>/SKILL.md` + `references/` — the skills
-- `scripts/` — `activate.sh`, benchmark tooling, and their tests (`scripts/tests/`)
-- `benchmark/` — fixture project, scenarios, eval set, run results
-- `docs/superpowers/` — design spec and implementation plan
+- `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (SessionStart bootstrap), `skills/` (bootstrap, `grill`, the three pointer skills, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
+- `.claude-plugin/marketplace.json` — makes this repo a single-plugin marketplace
+- `docs/plugin-behavior-tests.md` — headless behavior-test evidence; `docs/superpowers/` — design specs and plans
+- `scripts/behavior_test.py` — the behavior-test harness; `scripts/tests/` — all test suites
+- `skills/`, `scripts/activate.sh`, `scripts/hooks/` — the legacy v1 routers and their installer
+- `benchmark/` — fixture project, scenarios, eval set, iteration-1 results
+- `sources/` — pinned upstream archives (never loaded by agents)
 
 ## Tests
 
 ```bash
+scripts/tests/test_plugin.sh          # manifests validate, skills well-formed, Superpowers copies pinned
+scripts/tests/test_plugin_hook.sh     # the bootstrap hook against fixture homes and repos
 scripts/tests/test_activate.sh
 scripts/tests/test_skills.sh
 scripts/tests/test_prepare_run.sh

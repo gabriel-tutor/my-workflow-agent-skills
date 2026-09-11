@@ -126,3 +126,21 @@ The real injection is 2,813 bytes.
 **Harness fix.** Stopping a finished run once hit `EPERM` from `os.killpg` on macOS. `stop()` now falls back to signalling claude directly.
 
 **Permission finding.** Headless runs also deny reading the plugin's own `references/routing.md`. The harness allows it, and the rollout needs the same allow rule for the installed plugin's directory.
+
+## Final results on the shipped wording, 2026-09-12
+
+Every scenario was rerun on the final bootstrap and skills, 5 runs each, in fresh fixture workspaces. A first attempt the previous evening hit the account's session limit (HTTP 429 after 5 seconds) and was discarded; these runs are from a fresh account.
+
+| Scenario (spec §7) | Pass bar | Plugin | Control (no plugin) |
+| --- | --- | --- | --- |
+| `concurrency-bug` | `diagnosing-bugs` first | **5/5**, as the very first tool call | Edit first, 5/5 |
+| `cosmetic-edit` | no process skill | **5/5**, Edit after two reads | Edit first, 5/5 |
+| `small-behavior-change` (coupons) | `grill` first | **5/5**, as the very first tool call | Edit first, 5/5 |
+| Gift-card feature | `grill` first | **5/5**, as the very first tool call | Write first, 5/5 |
+| Grill presentation, coupons | one question per reply | **5/5** | not applicable |
+| Grill presentation, gift cards | one question per reply | **5/5** | not applicable |
+| Agreed multi-session design, no spec asked for | asks before spec work | **5/5** (Task 5) | Write first, 5/5 |
+
+Every grill reply was read by hand. Each one gives the facts, states how many decisions remain as a number, and ends with a single decision, recommended option first. On the coupon prompt all five opened with how a coupon combines with the tier discount; on gift cards, four opened with "tender or discount" and one with where the gift card enters checkout.
+
+Total behavior-test spend for the build, including revisions: about 130 headless runs.
