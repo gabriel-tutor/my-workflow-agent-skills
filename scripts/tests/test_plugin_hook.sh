@@ -19,7 +19,9 @@ description: fixture description that must not be injected
 ---
 
 Fixture routing policy line.
+Routing details: ${CLAUDE_PLUGIN_ROOT}/skills/using-matt-pocock-skills/references/routing.md
 MD
+FIX_REAL=$(cd "$FIX" && pwd -P)
 
 MP_HOME="$TMP/home-mp"; mkdir -p "$MP_HOME/.claude/skills/grilling"; : > "$MP_HOME/.claude/skills/grilling/SKILL.md"
 BARE_HOME="$TMP/home-bare"; mkdir -p "$BARE_HOME/.claude/skills"
@@ -46,6 +48,12 @@ C=$(context "$FIX" "$MP_HOME" "$PLAIN")
 [[ "$C" == "<EXTREMELY_IMPORTANT>"* && "$C" == *"</EXTREMELY_IMPORTANT>" ]] || fail "wrapper missing: $C"
 [[ "$C" == *"Fixture routing policy line."* ]] || fail "bootstrap body missing: $C"
 [[ "$C" != *"fixture description"* && "$C" != *"name: using-matt-pocock-skills"* ]] || fail "frontmatter leaked: $C"
+
+# ${CLAUDE_PLUGIN_ROOT} in the body becomes the plugin's absolute path, so the injected
+# bootstrap can point at its own reference files.
+[[ "$C" == *"Routing details: $FIX_REAL/skills/using-matt-pocock-skills/references/routing.md"* ]] \
+  || fail "plugin root not substituted: $C"
+[[ "$C" != *'${CLAUDE_PLUGIN_ROOT}'* ]] || fail "placeholder left in the injection: $C"
 
 # The MP-location line names the installed skills directory, or says MP was not found.
 C=$(context "$FIX" "$MP_HOME" "$PLAIN")

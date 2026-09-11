@@ -23,3 +23,23 @@ A headless session was run from this repo with `--plugin-dir plugin` and Superpo
 - **The model quoted back all three lines:** the bootstrap marker, the MP-location line pointing at `~/.claude/skills`, and the repo-setup line (this repo has no `docs/agents/issue-tracker.md`).
 - **The init event lists the plugin** as `matt-pocock-workflow@inline` version 2.0.0, with these skills: `matt-pocock-workflow:using-matt-pocock-skills` and the four copied Superpowers skills (`using-git-worktrees`, `verification-before-completion`, `finishing-a-development-branch`, `receiving-code-review`). No `superpowers:` skills are visible.
 - **Cost:** $0.21.
+
+## Routing: bugs and trivial edits (Task 3), 2026-09-11
+
+**The bootstrap at this point:**
+- the rule: classify the request, then invoke its skill before the first action; a 1% chance is enough, and the heavier row wins
+- one row for trivial edits and one for bugs
+- a red-flags line
+- the stage owners, with the Superpowers guard line
+- three rules
+
+The injection is 2,180 bytes.
+
+**Method.** `scripts/behavior_test.py` runs each prompt 5 times per arm, each time in a fresh fixture workspace, with `--permission-mode acceptEdits` and Superpowers disabled. A run's verdict is its first committing call: a Skill or AskUserQuestion call, or an Edit or Write. The prompts are the benchmark's own, from `benchmark/scenarios/<name>/prompt.md`.
+
+| Scenario | Control (no plugin) | Plugin |
+| --- | --- | --- |
+| `concurrency-bug` | Edit first, 5/5. Each run made one Bash call and 6–7 reads, then edited without writing any text first. | `diagnosing-bugs` first, 5/5. In every run it was the very first tool call. |
+| `cosmetic-edit` | Edit first, 5/5, after one Bash call and two reads. | Edit first, 5/5, after one Bash call and two reads. No process skill ran. |
+
+Both pass bars were met with the first wording, so no revisions were needed. Every record was read by hand: none timed out, and no run wrote text before its first committing call.

@@ -4,10 +4,12 @@
 Injects the using-matt-pocock-skills bootstrap at startup, /clear and compaction, the way
 Superpowers injects using-superpowers, so the routing policy is in context from turn one.
 
-Reads the SessionStart event on stdin and prints {"hookSpecificOutput": {...}}. Besides the
-bootstrap body it adds a "This session" section: where Matt Pocock's skills are installed (so
-the plugin's pointer skills can read them), and a /setup-matt-pocock-skills nudge when the
-working repo has no docs/agents/issue-tracker.md. Any error prints nothing and exits 0.
+Reads the SessionStart event on stdin and prints {"hookSpecificOutput": {...}}: the bootstrap
+body, with ${CLAUDE_PLUGIN_ROOT} replaced by the plugin's path so it can point at its own
+reference files, then a "This session" section. That section says where Matt Pocock's skills
+are installed, so the plugin's pointer skills can read them, and nudges toward
+/setup-matt-pocock-skills when the working repo has no docs/agents/issue-tracker.md.
+Any error prints nothing and exits 0.
 """
 import json
 import os
@@ -17,11 +19,8 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parent.parent
 BOOTSTRAP = PLUGIN / "skills" / "using-matt-pocock-skills" / "SKILL.md"
 
-PREAMBLE = (
-    "You have Matt Pocock's engineering skills. This is your "
-    "`matt-pocock-workflow:using-matt-pocock-skills` skill, the routing policy for this "
-    "session; use the Skill tool for every other skill."
-)
+PREAMBLE = ("You have Matt Pocock's engineering skills. Below is "
+            "`matt-pocock-workflow:using-matt-pocock-skills`, this session's routing policy.")
 
 
 def without_frontmatter(text: str) -> str:
@@ -37,8 +36,7 @@ def mp_line(home: Path) -> str:
     """Where Matt Pocock's skills live, so the plugin's pointer skills can read them."""
     skills = home / ".claude" / "skills"
     if (skills / "grilling" / "SKILL.md").is_file():
-        return (f"- Matt Pocock's skills are installed at `{skills}`. When a skill here says to "
-                f"read one of his, read `{skills}/<name>/SKILL.md`.")
+        return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
     return (f"- Matt Pocock's skills were not found in `{skills}`. `grill`, `to-spec`, `to-tickets` "
             "and `implement` cannot run until they are installed (skills-manager, or "
             "`npx skills add mattpocock/skills`) and a new session starts; tell the user.")
@@ -65,7 +63,7 @@ def main() -> int:
     try:
         event = json.loads(sys.stdin.read())
         cwd = Path(event.get("cwd") or os.getcwd())
-        body = without_frontmatter(BOOTSTRAP.read_text())
+        body = without_frontmatter(BOOTSTRAP.read_text()).replace("${CLAUDE_PLUGIN_ROOT}", str(PLUGIN))
         lines = (mp_line(Path.home()), setup_line(cwd))
         session = "## This session\n" + "\n".join(line for line in lines if line)
         context = ("<EXTREMELY_IMPORTANT>\n" + PREAMBLE + "\n\n" + body + "\n\n" + session
