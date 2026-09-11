@@ -2,6 +2,12 @@
 
 ## matt-pocock-workflow (plugin)
 
+### 2.0.1 — 2026-09-12
+- `to-spec`: when the grill already agreed the test seams, the spec records them instead of asking again. Matt Pocock's `to-spec` asks; the bootstrap says seams are settled in the grill.
+- The hook takes its root from `CLAUDE_PLUGIN_ROOT`, so a plugin installed from a local directory points at its own reference files (found at rollout).
+- Tested with Superpowers enabled alongside: Matt Pocock's skills still win every overlap (`docs/plugin-behavior-tests.md`).
+- `scripts/behavior_test.py`: `--superpowers`, a per-run count of loaded Superpowers skills, and writes outside the workspace count as exploration.
+
 ### 2.0.0 — 2026-09-12
 - Rebuilt as a Claude Code plugin under `plugin/`, installed from this repo's own marketplace (`.claude-plugin/marketplace.json`). Matt Pocock's skills lead every stage; the v1 router skill and the combo router are now legacy.
 - `hooks/session-start`: a SessionStart bootstrap (`startup|clear|compact`) that injects `using-matt-pocock-skills` plus two per-session lines: where Matt Pocock's skill files are, and a `/setup-matt-pocock-skills` nudge when the repo has no issue-tracker config. Fails open; ≤ 3,000 bytes.

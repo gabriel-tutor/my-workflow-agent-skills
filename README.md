@@ -15,7 +15,7 @@ Every session starts with the routing policy in context. Claude classifies each 
 | A build spanning several sessions | grill, then `to-spec`, `to-tickets`, and `implement` one ticket per session |
 | Foggy effort, issues someone else wrote, upkeep | Claude suggests `/wayfinder`, `/triage`, `/improve-codebase-architecture` |
 
-Matt Pocock's skills own design, planning, tests, bugs, review and execution. Four Superpowers skills cover what they don't: `using-git-worktrees`, `verification-before-completion` (verify), `finishing-a-development-branch` (finish) and `receiving-code-review`. They ship inside this plugin as unmodified, MIT-attributed copies (`plugin/THIRD_PARTY_NOTICES.md`), so the Superpowers plugin itself can stay disabled and there is only one bootstrap per session.
+Matt Pocock's skills own design, planning, tests, bugs, review and execution. Four Superpowers skills cover what they don't: `using-git-worktrees`, `verification-before-completion` (verify), `finishing-a-development-branch` (finish) and `receiving-code-review`. They ship inside this plugin as unmodified, MIT-attributed copies (`plugin/THIRD_PARTY_NOTICES.md`), so the Superpowers plugin itself is optional. Disable it for a single bootstrap per session, or keep it: Matt Pocock's skills still win every overlap (tested, see below).
 
 Three rules apply on every path: questions go through the clickable question tool with the recommended answer first; test seams are settled in the grill, so `tdd` doesn't ask again; and every chained step (`to-spec`, `to-tickets`, `implement`) asks before it starts and before it publishes anything.
 
@@ -37,7 +37,7 @@ Don't install his official `mattpocock-skills` Claude Code plugin alongside: you
 git clone https://github.com/gabriel-tutor/my-workflow-agent-skills.git
 claude plugin marketplace add ./my-workflow-agent-skills
 claude plugin install matt-pocock-workflow@my-workflow-agent-skills
-claude plugin disable superpowers@claude-plugins-official    # if you have it; one bootstrap per session
+claude plugin disable superpowers@claude-plugins-official    # optional: one bootstrap per session
 ```
 
 Restart Claude Code. Every new session now opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are, and a nudge to run `/setup-matt-pocock-skills` when the repo has no `docs/agents/issue-tracker.md` yet.
@@ -90,12 +90,16 @@ claude plugin enable superpowers@claude-plugins-official
 
 The grill's one-question-at-a-time format took three wording revisions to reach 5/5 on both feature prompts; the doc shows what leaked each time.
 
+**With Superpowers enabled too**, both bootstraps load and the plugin's guard line gives Matt Pocock's skills every overlap. Tested with all 14 Superpowers skills loaded: the bug went to `diagnosing-bugs` 5/5, the feature to `grill` 5/5, the typo straight to an edit 3/3, and the agreed design to the plugin's spec gate 3/3. No run invoked a Superpowers skill.
+
 Run the harness yourself:
 
 ```bash
 python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --runs 5
 python3 scripts/behavior_test.py run --scenario concurrency-bug --arm control --runs 5
 ```
+
+Add `--superpowers` to run with your own Superpowers setting instead of forcing it off.
 
 ## Benchmark results (v1 routers)
 

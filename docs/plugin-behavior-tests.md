@@ -169,3 +169,32 @@ Installed on the user's machine from the repo as a local-directory marketplace: 
 **Defect found by the rollout check, fixed.** Reading the bootstrap's `routing.md` reference was denied. Cause: a local-directory marketplace runs the plugin from the repo checkout (`known_marketplaces.json` records `installLocation` = the repo), while the hook computed the injected path from its own `__file__`, and the allow rule covered only `~/.claude/plugins/**`. Two fixes: the hook now takes the root from `CLAUDE_PLUGIN_ROOT` (which Claude Code supplies) and falls back to `__file__` only for direct runs, with a unit test; and the README documents the extra allow rule a local-directory install needs. After adding that rule here, a second fresh-session check read both Matt Pocock's `to-spec/SKILL.md` and the reference file with zero permission denials.
 
 Remaining for the user: the five "done means" checks from spec §1, in an interactive session in a real repo, where AskUserQuestion is available.
+
+## After a settings cleanup, with Superpowers on, 2026-09-12
+
+The user ran a `claude doctor` cleanup from another session, which rewrote `~/.claude/settings.json` after the install. The plugin itself was untouched: still enabled, cache matching the repo, allow rules intact. But the cleanup added a `skillOverrides` block that switched off 15 of the 35 installed Matt Pocock skills, including two the workflow points at (`prototype`, `resolving-merge-conflicts`). At the user's request, every Matt Pocock skill was switched back on and Superpowers was re-enabled. The 44 other skills the cleanup switched off were left alone. Backups: `settings.json.pre-skill-reenable`, `settings.json.pre-mp-sp-on`.
+
+**Harness changes:**
+- `--superpowers` runs with the user's own Superpowers setting instead of forcing it off. Each record counts the `superpowers:` skills the run loaded (`superpowers_skills`), which proves which arm a run was in.
+- Writes outside the run's workspace (throwaway scripts in `/tmp`) now count as exploration, not as the run's commit. Before this change, three of five spec runs ended at a race-check script without saying anything about the spec.
+
+**The `to-spec` seam fix.** Matt Pocock's `to-spec` tells Claude to confirm the test seams with the user, but the bootstrap says seams settled in the grill aren't asked again. The pointer skill now says to write the agreed seams into the spec instead of asking. Results on the explicit "Write the spec" prompt:
+
+| Wording | Asked about seams before writing |
+| --- | --- |
+| Before the fix, 2026-09-11 | 1 of 2 runs |
+| Before the fix, 2026-09-12 baseline | 0 of 2 conclusive runs (3 ended at an outside script) |
+| After the fix | 0 of 5. All five wrote the spec and stated `checkout()` as "the seam agreed in the grill". |
+
+The baseline failure rate was low. So the case for the fix is the removed contradiction plus a clean 5/5 afterwards, not a measured drop.
+
+**Routing with Superpowers enabled.** Both bootstraps load, and every run loaded all 14 `superpowers:` skills.
+
+| Prompt | Pass bar | Result |
+| --- | --- | --- |
+| `concurrency-bug` | `diagnosing-bugs` first, not `systematic-debugging` | 5/5 |
+| Gift-card feature | `grill` first, not `brainstorming` | 5/5 |
+| `cosmetic-edit` | no process skill | 3/3 |
+| Agreed multi-session design, "let's get going" | the plugin's "Write the spec now?" gate, not `writing-plans` | 3/3 |
+
+No run invoked any `superpowers:` skill, so the bootstrap's guard line holds. The same Superpowers-on runs showed 35 of 37 Matt Pocock skills visible. The two missing, `implement-spec` and `retro`, are in skills-manager but were never linked into `~/.claude/skills`, before or after the cleanup.

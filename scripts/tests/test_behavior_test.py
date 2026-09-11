@@ -36,15 +36,37 @@ def result(value: str, cost: float | None = None) -> dict:
     return {"type": "result", "subtype": "success", "result": value, "total_cost_usd": cost}
 
 
-def scan(*items: dict | str, past_skill: bool = False) -> dict:
+def scan(*items: dict | str, past_skill: bool = False, workspace: Path | None = None) -> dict:
     """Scan a stream built from event dicts and raw (possibly malformed) lines."""
     lines = (json.dumps(i) if isinstance(i, dict) else i for i in items)
     with tempfile.TemporaryDirectory() as d:
         stream = Path(d) / "stream.jsonl"
         stream.write_text("".join(line + "\n" for line in lines))
-        cmd = [sys.executable, str(HARNESS), "scan", str(stream)] + (["--past-skill"] if past_skill else [])
+        cmd = [sys.executable, str(HARNESS), "scan", str(stream)]
+        cmd += ["--past-skill"] if past_skill else []
+        cmd += ["--workspace", str(workspace)] if workspace else []
         out = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
+
+
+class RunContextTest(unittest.TestCase):
+    """What a run record says about its surroundings: which skills loaded, where it wrote."""
+
+    def test_superpowers_skills_are_counted_from_init(self):
+        init = {**INIT, "skills": ["superpowers:brainstorming", "superpowers:writing-plans",
+                                   "grilling", "matt-pocock-workflow:grill"]}
+        r = scan(init, assistant(tool("Skill", skill="matt-pocock-workflow:grill")))
+        self.assertEqual(r["superpowers_skills"], 2)
+
+    def test_writes_outside_the_workspace_are_exploration(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d) / "workspace"
+            ws.mkdir()
+            r = scan(INIT,
+                     assistant(tool("Write", file_path="/tmp/race-check.mts")),
+                     assistant(tool("Write", file_path=str(ws / "docs" / "spec.md"))),
+                     workspace=ws)
+        self.assertEqual((r["first_tool"], r["before"]), ("Write", ["Write(outside)"]))
 
 
 class ScanTest(unittest.TestCase):
