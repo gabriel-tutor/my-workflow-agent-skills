@@ -4,7 +4,7 @@
 A run's verdict is its first committing call: a Skill or AskUserQuestion call (a process
 choice) or an Edit/Write (straight to code). Everything before it is exploration.
 
-  behavior_test.py run --scenario S --arm plugin|control [--runs 5] [--jobs 5]
+  behavior_test.py run --scenario S --arm plugin|control [--runs 5] [--jobs 5] [--past-skill]
                        [--prompt TEXT] [--label NAME] [--timeout 300] [--out DIR]
       Runs `claude -p` in fresh fixture workspaces (scripts/prepare_run.sh S) with Superpowers
       disabled through --settings, adding --plugin-dir plugin for the plugin arm. Each run
@@ -12,8 +12,13 @@ choice) or an Edit/Write (straight to code). Everything before it is exploration
       every raw stream, appends one record per run to <out>/results.jsonl, prints a summary.
       The prompt defaults to benchmark/scenarios/S/prompt.md.
 
-  behavior_test.py scan STREAM
+  behavior_test.py scan [--past-skill] STREAM
       Prints the record for a saved stream-json file.
+
+With --past-skill, Skill calls are recorded (in order, as `skills`) but do not stop the run,
+so a test can see what the skill does next: for the grill, its first question. Headless runs
+have no AskUserQuestion, so that question arrives as the reply; `text_questions` counts the
+question marks in it.
 """
 import argparse
 import json
@@ -39,9 +44,11 @@ STOP_TOOLS = {"Skill", "AskUserQuestion", "Edit", "Write", "MultiEdit", "Noteboo
 class Scanner:
     """Follows one run's stream-json events up to its first committing call."""
 
-    def __init__(self):
-        self.record = {"model": None, "first_tool": None, "skill": None, "questions": None,
-                       "before": [], "text": "", "result": None, "cost_usd": None}
+    def __init__(self, past_skill: bool = False):
+        self.past_skill = past_skill
+        self.record = {"model": None, "first_tool": None, "skill": None, "skills": [],
+                       "questions": None, "before": [], "text": "", "result": None,
+                       "text_questions": None, "cost_usd": None}
         self.stopped = False
 
     def feed(self, event) -> bool:
@@ -53,6 +60,7 @@ class Scanner:
             self.record["model"] = event.get("model")
         elif kind == "result":
             self.record["result"] = event.get("result")
+            self.record["text_questions"] = (event.get("result") or "").count("?")
             self.record["cost_usd"] = event.get("total_cost_usd")
         elif kind == "assistant":
             for block in (event.get("message") or {}).get("content") or []:
@@ -67,17 +75,20 @@ class Scanner:
         if name not in STOP_TOOLS:
             self.record["before"].append(name)
             return False
-        self.record["first_tool"] = name
         if name == "Skill":
-            self.record["skill"] = inputs.get("skill")
+            self.record["skills"].append(inputs.get("skill"))
+            self.record["skill"] = self.record["skill"] or inputs.get("skill")
+            if self.past_skill:
+                return False
         elif name == "AskUserQuestion":
             self.record["questions"] = len(inputs.get("questions") or [])
+        self.record["first_tool"] = name
         self.stopped = True
         return True
 
 
-def scan(stream: Path) -> dict:
-    scanner = Scanner()
+def scan(stream: Path, past_skill: bool = False) -> dict:
+    scanner = Scanner(past_skill)
     for line in stream.read_text().splitlines():
         try:
             event = json.loads(line)
@@ -96,14 +107,15 @@ def stop(proc: subprocess.Popen, sig: int) -> None:
         pass
 
 
-def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float) -> dict:
+def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float,
+             past_skill: bool) -> dict:
     run_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["bash", str(PREPARE), scenario, str(run_dir)], check=True, capture_output=True)
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--permission-mode", "acceptEdits", "--settings", SETTINGS]
     if arm == "plugin":
         cmd += ["--plugin-dir", str(PLUGIN)]
-    scanner, expired = Scanner(), threading.Event()
+    scanner, expired = Scanner(past_skill), threading.Event()
     started = time.monotonic()
     with open(run_dir / "stream.jsonl", "w") as raw, open(run_dir / "stderr.txt", "w") as err:
         proc = subprocess.Popen(cmd, cwd=run_dir / "workspace", stdin=subprocess.DEVNULL,
@@ -137,14 +149,19 @@ def verdict(record: dict) -> str:
         return f"Skill {record['skill']}"
     if record["first_tool"]:
         return record["first_tool"]
-    return "timeout" if record.get("timed_out") else "no commit"
+    if record.get("timed_out"):
+        return "timeout"
+    return "reply" if record["result"] is not None else "no commit"
 
 
 def print_summary(label: str, arm: str, out: Path, records: list) -> None:
     print(f"{label} [{arm}] x{len(records)} -> {out}")
     for r in records:
         before = ",".join(r["before"]) or "-"
-        print(f"  run {r['run']}: {verdict(r):44} before={before:32.32} {r['seconds']:>4}s")
+        skills = ",".join(s or "?" for s in r["skills"]) or "-"
+        marks = "-" if r["text_questions"] is None else r["text_questions"]
+        print(f"  run {r['run']}: {verdict(r):40} skills={skills:44.44} ?={marks!s:<3}"
+              f" before={before:24.24} {r['seconds']:>4}s")
     counts = Counter(verdict(r) for r in records)
     print("  first committing call: " + ", ".join(f"{k} x{v}" for k, v in counts.most_common()))
 
@@ -153,12 +170,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Headless behavior tests for the plugin.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     scan_p = sub.add_parser("scan", help="print the record for a saved stream")
+    scan_p.add_argument("--past-skill", action="store_true")
     scan_p.add_argument("stream", type=Path)
     run_p = sub.add_parser("run", help="run headless sessions and record their first commits")
     run_p.add_argument("--scenario", required=True)
     run_p.add_argument("--arm", choices=("plugin", "control"), required=True)
     run_p.add_argument("--runs", type=int, default=5)
     run_p.add_argument("--jobs", type=int, default=5)
+    run_p.add_argument("--past-skill", action="store_true")
     run_p.add_argument("--prompt")
     run_p.add_argument("--label")
     run_p.add_argument("--timeout", type=float, default=300)
@@ -166,7 +185,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "scan":
-        print(json.dumps(scan(args.stream)))
+        print(json.dumps(scan(args.stream, args.past_skill)))
         return 0
 
     prompt = args.prompt or (SCENARIOS / args.scenario / "prompt.md").read_text().strip()
@@ -175,7 +194,8 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     def one(n: int) -> dict:
-        record = run_once(args.scenario, args.arm, prompt, out / f"{args.arm}-{n}", args.timeout)
+        record = run_once(args.scenario, args.arm, prompt, out / f"{args.arm}-{n}",
+                          args.timeout, args.past_skill)
         return {"label": label, "scenario": args.scenario, "arm": args.arm, "run": n, **record}
 
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
