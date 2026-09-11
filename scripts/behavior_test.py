@@ -6,8 +6,9 @@ choice) or an Edit/Write (straight to code). Everything before it is exploration
 
   behavior_test.py run --scenario S --arm plugin|control [--runs 5] [--jobs 5] [--past-skill]
                        [--prompt TEXT] [--label NAME] [--timeout 300] [--out DIR]
-      Runs `claude -p` in fresh fixture workspaces (scripts/prepare_run.sh S) with Superpowers
-      disabled through --settings, adding --plugin-dir plugin for the plugin arm. Each run
+      Runs `claude -p` in fresh fixture workspaces (scripts/prepare_run.sh S), with --settings
+      disabling Superpowers and allowing reads of Matt Pocock's skill files, adding
+      --plugin-dir plugin for the plugin arm. Each run
       stops at its first committing call, at the end of the reply, or at the timeout. Keeps
       every raw stream, appends one record per run to <out>/results.jsonl, prints a summary.
       The prompt defaults to benchmark/scenarios/S/prompt.md.
@@ -37,7 +38,14 @@ REPO = Path(__file__).resolve().parent.parent
 PLUGIN = REPO / "plugin"
 PREPARE = REPO / "scripts" / "prepare_run.sh"
 SCENARIOS = REPO / "benchmark" / "scenarios"
-SETTINGS = json.dumps({"enabledPlugins": {"superpowers@claude-plugins-official": False}})
+# Superpowers off, plus the recommended read access: to Matt Pocock's skill files (the entries in
+# ~/.claude/skills are symlinks, and permission checks use the resolved ~/.skills-manager path)
+# and to the plugin's own reference files. A leading // makes a Read rule absolute.
+SETTINGS = json.dumps({
+    "enabledPlugins": {"superpowers@claude-plugins-official": False},
+    "permissions": {"allow": ["Read(~/.claude/skills/**)", "Read(~/.skills-manager/**)",
+                              f"Read(/{PLUGIN}/**)"]},
+})
 STOP_TOOLS = {"Skill", "AskUserQuestion", "Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
@@ -100,11 +108,17 @@ def scan(stream: Path, past_skill: bool = False) -> dict:
 
 
 def stop(proc: subprocess.Popen, sig: int) -> None:
-    """Signal the run's whole process group (claude plus the MCP servers it started)."""
+    """Signal the run's whole process group (claude plus the MCP servers it started), falling
+    back to claude alone when the group cannot be signalled (macOS can refuse with EPERM)."""
     try:
         os.killpg(proc.pid, sig)
     except ProcessLookupError:
         pass
+    except OSError:
+        try:
+            proc.send_signal(sig)
+        except OSError:
+            pass
 
 
 def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float,

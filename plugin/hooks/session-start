@@ -37,9 +37,8 @@ def mp_line(home: Path) -> str:
     skills = home / ".claude" / "skills"
     if (skills / "grilling" / "SKILL.md").is_file():
         return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
-    return (f"- Matt Pocock's skills were not found in `{skills}`. `grill`, `to-spec`, `to-tickets` "
-            "and `implement` cannot run until they are installed (skills-manager, or "
-            "`npx skills add mattpocock/skills`) and a new session starts; tell the user.")
+    return (f"- Matt Pocock's skills were not found in `{skills}`: tell the user to install them "
+            "(`npx skills add mattpocock/skills` or skills-manager) and start a new session.")
 
 
 def repo_root(start: Path) -> Path | None:

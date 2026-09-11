@@ -24,6 +24,14 @@ assert fields.get("disable-model-invocation", "false") != "true", "user-only ski
 PY
 done
 
+# Pointer skills: each loads its own Matt Pocock skill file and stops when his skills are missing.
+# A static guard: checking this headless would mean running Claude under a fixture HOME.
+for s in to-spec to-tickets implement; do
+  f="$PLUGIN/skills/$s/SKILL.md"
+  grep -q "\`$s/SKILL.md\`" "$f" || fail "$s does not load Matt Pocock's $s/SKILL.md"
+  grep -q "aren't installed" "$f" || fail "$s has no stop for a missing Matt Pocock install"
+done
+
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
 for s in $KEPT; do [[ -f "$PLUGIN/skills/$s/SKILL.md" ]] || fail "missing copied skill: $s"; done
