@@ -7,6 +7,7 @@ How much of the lens applies scales with the change:
 - **Bounded change to existing code:** interfaces and seams, failure modes, testing. The rest only if the change touches it.
 - **New behavior that fits one session:** every axis that applies.
 - **A build spanning several sessions:** every axis, and the answers go into the spec.
+- **A sensitive change, at any size** (auth, permissions, secrets, billing, migrations, infrastructure, CI or deploy configuration, a public API, anything destructive): security boundaries and failure modes, on top of whatever its size applies.
 
 ## The axes
 

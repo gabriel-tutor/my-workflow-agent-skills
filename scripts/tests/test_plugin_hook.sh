@@ -4,9 +4,15 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO/plugin/hooks/session-start"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" "$HOMES_BASE"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 [[ -x "$HOOK" ]] || fail "hook missing or not executable: $HOOK"
+# The fixture homes sit under a path of exactly 47 characters, so the byte counts the budget guard
+# prints are the same on every machine (mktemp's own directory is 63 characters on macOS, 19 on
+# Ubuntu), and longer than any real home (/Users/<name>, /home/<name>, a CI runner's).
+HOMES_BASE="$(mktemp -d /tmp/seams.XXXXXXXX)"
+HOMES="$HOMES_BASE/$(printf '%0*d' $((46 - ${#HOMES_BASE})) 0 | tr 0 h)"; mkdir -p "$HOMES"
+[[ ${#HOMES} -eq 47 ]] || fail "fixture home base is ${#HOMES} characters, not 47: $HOMES"
 
 # A fixture copy of the plugin whose bootstrap body is a known literal.
 FIX="$TMP/plugin"
@@ -28,27 +34,29 @@ REQUIRED=(grilling domain-modeling tdd diagnosing-bugs code-review codebase-desi
 # skills <dir> [name...]: SKILL.md files for the named skills (all nine by default) under <dir>.
 skills() { local dir="$1"; shift; local names=("$@"); [[ $# -eq 0 ]] && names=("${REQUIRED[@]}")
            local n; for n in "${names[@]}"; do mkdir -p "$dir/$n"; : > "$dir/$n/SKILL.md"; done; }
-MP_HOME="$TMP/home-mp"; skills "$MP_HOME/.claude/skills"
-PARTIAL_HOME="$TMP/home-partial"                      # a realistic partial: two skills he added since the install
+MP_HOME="$HOMES/home-mp"; skills "$MP_HOME/.claude/skills"
+PARTIAL_HOME="$HOMES/home-partial"                      # a realistic partial: two skills he added since the install
 skills "$PARTIAL_HOME/.claude/skills" grilling domain-modeling tdd diagnosing-bugs code-review setup-matt-pocock-skills setup-pre-commit
-BARE_HOME="$TMP/home-bare"; mkdir -p "$BARE_HOME/.claude/skills"
-CUSTOM_CONFIG="$TMP/custom config dir"; skills "$CUSTOM_CONFIG/skills"                # CLAUDE_CONFIG_DIR, with spaces
+BARE_HOME="$HOMES/home-bare"; mkdir -p "$BARE_HOME/.claude/skills"
+CUSTOM_CONFIG="$HOMES/custom config dir"; skills "$CUSTOM_CONFIG/skills"                # CLAUDE_CONFIG_DIR, with spaces
 # skills.sh installs each skill as a symlink into its own store; some people link the whole directory.
 MANAGER="$TMP/manager/skills"; skills "$MANAGER"
-LINK_HOME="$TMP/home-links"; mkdir -p "$LINK_HOME/.claude/skills"
+LINK_HOME="$HOMES/home-links"; mkdir -p "$LINK_HOME/.claude/skills"
 for n in "${REQUIRED[@]}"; do ln -s "$MANAGER/$n" "$LINK_HOME/.claude/skills/$n"; done
-DIRLINK_HOME="$TMP/home-dirlink"; mkdir -p "$DIRLINK_HOME/.claude"; ln -s "$MANAGER" "$DIRLINK_HOME/.claude/skills"
+DIRLINK_HOME="$HOMES/home-dirlink"; mkdir -p "$DIRLINK_HOME/.claude"; ln -s "$MANAGER" "$DIRLINK_HOME/.claude/skills"
 unset CLAUDE_CONFIG_DIR   # the caller's shell must not decide where the hook looks
 PLAIN="$TMP/plain"; mkdir -p "$PLAIN"
 REPO_UNSET="$TMP/repo-unset"; mkdir -p "$REPO_UNSET/sub/dir"; git -C "$REPO_UNSET" init -q
 REPO_SET="$TMP/repo-set"; mkdir -p "$REPO_SET/docs/agents"; git -C "$REPO_SET" init -q
 : > "$REPO_SET/docs/agents/issue-tracker.md"
 
-# context <plugin-dir> <home> <cwd> [config-dir]: the injected context, or nothing when the hook
-# prints nothing. The fourth argument, when given, is the session's CLAUDE_CONFIG_DIR.
+# context <plugin-dir> <home> <cwd> [config-dir] [root]: the injected context, or nothing when the
+# hook prints nothing. The fourth argument, when given, is the session's CLAUDE_CONFIG_DIR; the
+# fifth, the CLAUDE_PLUGIN_ROOT Claude Code would supply.
 context() {
   local out event="{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$3\"}"
-  out=$(env HOME="$2" ${4:+CLAUDE_CONFIG_DIR="$4"} "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"
+  out=$(env HOME="$2" ${4:+CLAUDE_CONFIG_DIR="$4"} ${5:+CLAUDE_PLUGIN_ROOT="$5"} "$1/hooks/session-start" <<< "$event") \
+    || fail "hook exited non-zero"
   [[ -z "$out" ]] && return 0
   python3 -c '
 import json, sys
@@ -91,7 +99,8 @@ C=$(context "$FIX" "$PARTIAL_HOME" "$PLAIN")
 [[ "$C" == *"missing codebase-design, setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills"* ]] \
   || fail "partial install not reported with the missing names and the install command: $C"
 [[ "$C" != *"skill files"* ]] || fail "partial install reported as installed: $C"
-[[ "$(grep missing <<< "$C")" != *grilling* && "$(grep missing <<< "$C")" != *tdd* ]] || fail "a present skill listed as missing: $C"
+MISSING_LINE=$(grep missing <<< "$C")
+[[ $MISSING_LINE != *grilling* && $MISSING_LINE != *tdd* ]] || fail "a present skill listed as missing: $C"
 
 # Symlinked skill directories, and a symlinked skills directory, count as installed.
 for H in "$LINK_HOME" "$DIRLINK_HOME"; do
@@ -139,13 +148,11 @@ chmod 644 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"   # so the trap
 # Guard: the real bootstrap, injected from a cache-length plugin path (120 characters) with both
 # dynamic lines, stays at or under 2,900 bytes: the 3,000-byte budget less 100 bytes of headroom.
 # Every MP-line variant: installed, a realistic partial (two names missing), not installed,
-# symlinked, and a custom config directory.
+# symlinked, and a custom config directory. The fixture homes' fixed length keeps the counts the
+# same on every machine.
 ROOT120="/$(printf '%0119d' 0 | tr 0 a)"; [[ ${#ROOT120} -eq 120 ]] || fail "ROOT120 is ${#ROOT120} characters"
 budget() {   # budget <home> [config-dir]
-  local C N event="{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$REPO_UNSET\"}"
-  C=$(env HOME="$1" CLAUDE_PLUGIN_ROOT="$ROOT120" ${2:+CLAUDE_CONFIG_DIR="$2"} "$HOOK" <<< "$event" \
-      | python3 -c 'import json, sys; print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])') \
-    || fail "hook failed while measuring the budget (HOME=$1)"
+  local C N; C=$(context "$REPO/plugin" "$1" "$REPO_UNSET" "${2:-}" "$ROOT120")
   [[ "$C" == *"$ROOT120/skills/using-matt-pocock-skills/references/routing.md"* ]] || fail "the 120-character root was not injected: $C"
   N=$(printf '%s' "$C" | wc -c | tr -d ' ')
   (( N <= 2900 )) || fail "injection is $N bytes from a 120-character plugin path, over 2,900 (3,000 less 100 headroom) (HOME=$1${2:+ CLAUDE_CONFIG_DIR=$2})"

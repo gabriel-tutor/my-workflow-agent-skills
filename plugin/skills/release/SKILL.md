@@ -15,7 +15,7 @@ Establish three facts, from the repo where the repo can answer (facts are not qu
 2. **Target.** Where the work runs: the user's words, the spec's Release section, or the repo's deploy configuration (a platform config file, a deploy workflow or script, a publish script, a store or marketplace manifest). See the target table below.
 3. **Environment.** The environments the target has (staging, preview, a test track, production) and which one this release is for.
 
-Then ask with AskUserQuestion, recommended answer first: "Release candidate `<sha>` to `<target>`, environment `<environment>`: check readiness now?" Skip this only when the user's last message asked for the release; reaching this skill on your own initiative always asks. What the repo cannot answer is an unmet row in the readiness table, asked there; do not ask for what a file already says.
+Then ask with AskUserQuestion, recommended answer first: "Release candidate `<sha>` to `<target>`, environment `<environment>`: check readiness now?" Skip this only when the user's last message asked for the release, or a yes earlier in this request covered it ("then take it to staging"); reaching this skill on your own initiative always asks, and the Deploy step's question is never skipped. What the repo cannot answer is an unmet row in the readiness table, asked there; do not ask for what a file already says.
 
 ## Readiness
 

@@ -99,7 +99,7 @@ The same flow, as a table:
 | Broken, failing, throwing, slow | `diagnosing-bugs`, then verify and finish |
 | Bounded change to existing code | short `grill`, then `tdd`, then verify and finish |
 | New behavior that fits one session | `grill` + `domain-modeling`, then `implement`, then verify and finish |
-| A build spanning several sessions, or a new app | grill, then `to-spec`, `to-tickets`, and `implement` one ticket per session; a new app starts with the walking skeleton |
+| A build spanning several sessions, or a new app | `grill`, then `to-spec`, `to-tickets`, and `implement` one ticket per session; a new app's ticket 01 is the walking skeleton |
 | Ship, deploy, release, publish | `release`: readiness, a deploy behind an explicit yes, verification, an operations handover |
 | Foggy effort, issues someone else wrote, upkeep | Claude suggests `/wayfinder`, `/triage`, `/improve-codebase-architecture` |
 

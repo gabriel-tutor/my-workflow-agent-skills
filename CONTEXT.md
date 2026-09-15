@@ -29,7 +29,7 @@ A change with no effect on behavior, data shape or security-relevant configurati
 _Avoid_: quick fix, small change (a small change can still change behavior)
 
 **Sensitive change**:
-A change, of any size, to auth, permissions, secrets, billing, data migrations, infrastructure or deploy configuration, a public API, or anything destructive. Never trivial.
+A change, of any size, to auth, permissions, secrets, billing, data migrations, infrastructure, CI or deploy configuration, a public API, or anything destructive. Never trivial.
 _Avoid_: risky change, careful change
 
 **Done-check**:

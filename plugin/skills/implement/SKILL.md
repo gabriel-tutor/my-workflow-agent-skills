@@ -9,7 +9,7 @@ Build the work a spec, a ticket or an agreed design describes: tests first at th
 
 ## Gate
 
-Before reading anything, confirm which spec, ticket or agreed design you're building, and where. Offer a worktree through `matt-pocock-workflow:using-git-worktrees`, which asks for consent, or the current branch. Wait for a yes. Skip this only when the user's last message already names both.
+Before reading anything, confirm which spec, ticket or agreed design you're building, and where. Offer a worktree through `matt-pocock-workflow:using-git-worktrees`, which asks for consent, or the current branch. Wait for a yes. Skip this only when the user's last message already names both, or when a yes earlier in this request covered this ticket and where it goes ("build all three on main").
 
 Then note the starting point, which the review's fixed point needs: the current branch, its base branch, and `git rev-parse HEAD`.
 

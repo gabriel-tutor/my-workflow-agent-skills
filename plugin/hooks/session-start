@@ -85,8 +85,7 @@ def setup_line(cwd: Path) -> str | None:
     root = repo_root(cwd)
     if root is None or (root / "docs" / "agents" / "issue-tracker.md").is_file():
         return None
-    return ("- No `docs/agents/issue-tracker.md` here: offer `matt-pocock-workflow:foundations` "
-            "before the first spec, tickets, review or triage.")
+    return "- No `docs/agents/issue-tracker.md` here: offer `matt-pocock-workflow:foundations` first."
 
 
 def ledger_housekeeping(event: dict) -> None:

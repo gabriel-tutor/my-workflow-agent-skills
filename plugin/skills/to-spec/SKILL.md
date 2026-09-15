@@ -9,7 +9,7 @@ Turn the current conversation into a spec and publish it to the project's issue 
 
 ## Gate
 
-Before reading anything, ask "Write the spec now?" with AskUserQuestion, recommended answer first, and wait for a yes. Skip this only when the user's last message asks for a spec, or says yes to an offer to write one. A general go-ahead such as "let's get going" or "next" is not a request for a spec.
+Before reading anything, ask "Write the spec now?" with AskUserQuestion, recommended answer first, and wait for a yes. Skip this only when the user's last message asks for a spec or says yes to an offer to write one, or when a yes earlier in this request covered the spec ("grill it, then write the spec"). A general go-ahead such as "let's get going" or "next" is not a request for a spec.
 
 The issue tracker and the triage labels should already be in context (`docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`). If the repo has neither, offer `matt-pocock-workflow:foundations` before going on; its `/setup-matt-pocock-skills` step, which only the user can run, writes them.
 

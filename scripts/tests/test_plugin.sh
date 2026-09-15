@@ -165,17 +165,21 @@ for d in "$PLUGIN"/skills/*/; do
   s=$(basename "$d"); [[ $s == using-matt-pocock-skills ]] && continue
   [[ $NAMED == *"\`$s\`"* || $NAMED == *"matt-pocock-workflow:$s"* ]] || fail "Seams skill named neither in the bootstrap nor in routing.md: $s"
 done
-must_say bootstrap "$BOOT" "| Trivial" "\`trivial\`*" "| Sensitive" "any size" "anything destructive" "\`grill\`* (security and failure axes)" \
+must_say bootstrap "$BOOT" "| Trivial" "\`trivial\`*" "| Sensitive" "any size" "anything destructive" "\`grill\`* on the security and failure axes" "its size row" \
   "\`code-review\` required" "\`incident\`*" "\`release\`*" "walking skeleton" "A hook refuses" "\`verification-before-completion\`*" \
   "a yes covering later steps is not asked again" "deploy and publish always ask" "\"it's a quick fix\"" "\"the requirements are clear\""
 grep -qF "config, rename" "$BOOT" && fail "the trivial row still lists config and rename without a qualifier"
 # routing.md carries what moved out of the bootstrap and the rules the spec added: the worktree and
 # review-feedback owners, the judgment rule at a phase boundary (no token figure), the named durable
 # state, evidence reuse for an unchanged candidate, the greenfield path.
-must_say routing.md "$ROUTING" "\`using-git-worktrees\`" "\`receiving-code-review\`" "Durable state" "\`CONTEXT.md\`" "ADRs" \
+must_say routing.md "$ROUTING" "\`matt-pocock-workflow:using-git-worktrees\`" "\`matt-pocock-workflow:receiving-code-review\`" "Durable state" "\`CONTEXT.md\`" "ADRs" \
   "resumed" "unchanged candidate" "Greenfield" "walking skeleton" "\`/ask-matt\`"
-grep -q "150k" "$ROUTING" && fail "routing.md still carries the 150k-token figure"
-grep -qE "[0-9]+k tokens" "$BOOT" && fail "the bootstrap carries a token figure"
+for f in "$ROUTING" "$BOOT"; do grep -qE "[0-9]+k( |-)tokens?" "$f" && fail "a token figure is back in $(basename "$f"); the phase-boundary rule is a judgment rule"; done
+# The design lens carries the Sensitive row's rule, and the four gated skills honour rule 4: a yes given
+# earlier in the request that covered the step is the yes, while release's deploy question never is.
+must_say design-lens "$PLUGIN/skills/grill/references/design-lens.md" "**A sensitive change, at any size**" "security boundaries and failure modes"
+for s in to-spec to-tickets implement release; do must_say "$s" "$PLUGIN/skills/$s/SKILL.md" "a yes earlier in this request covered"; done
+must_say release "$PLUGIN/skills/release/SKILL.md" "never skipped"
 
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
