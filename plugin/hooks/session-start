@@ -9,12 +9,16 @@ body, with ${CLAUDE_PLUGIN_ROOT} replaced by the plugin's path so it can point a
 reference files, then a "This session" section. That section says where Matt Pocock's skills
 are installed, so the plugin's pointer skills can read them, and nudges toward
 the foundations skill when the working repo has no docs/agents/issue-tracker.md.
-Any error prints nothing and exits 0.
+Any error prints nothing and exits 0. Python 3.9: macOS's system interpreter may run this.
 """
+from __future__ import annotations
+
 import json
 import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
 HERE = Path(__file__).resolve().parent.parent
 # The root Claude Code runs this plugin from. It supplies CLAUDE_PLUGIN_ROOT; for a plugin
@@ -62,9 +66,25 @@ def setup_line(cwd: Path) -> str | None:
             "before the first spec, tickets, review or triage.")
 
 
+def ledger_housekeeping(event: dict) -> None:
+    """A new session or /clear starts with an empty ledger; compaction keeps it; old ones go."""
+    import seams_gate as gate
+    session = event.get("session_id") or ""
+    if event.get("source") in ("startup", "clear"):
+        gate.reset_ledger(session)
+    gate.cleanup_ledgers()
+
+
 def main() -> int:
     try:
         event = json.loads(sys.stdin.read())
+    except Exception:
+        return 0                               # fail open: nothing to inject, nothing to sweep
+    try:
+        ledger_housekeeping(event)
+    except Exception:
+        pass                                   # the bootstrap still gets injected below
+    try:
         cwd = Path(event.get("cwd") or os.getcwd())
         body = without_frontmatter(BOOTSTRAP.read_text()).replace("${CLAUDE_PLUGIN_ROOT}", str(PLUGIN))
         lines = (mp_line(Path.home()), setup_line(cwd))

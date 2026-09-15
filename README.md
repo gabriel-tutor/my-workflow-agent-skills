@@ -216,7 +216,7 @@ The senior-engineer layer was tested the same way: `foundations` surveyed a repo
 
 ## Layout
 
-- `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (SessionStart bootstrap), `skills/` (bootstrap, `grill` with its design lens, `foundations`, the three pointer skills, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
+- `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (the SessionStart bootstrap and the gate: `seams_gate.py` plus the PreToolUse, PostToolUse and UserPromptSubmit hooks), `skills/` (bootstrap, `grill` with its design lens, `foundations`, `trivial`, the three flow skills, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
 - `.claude-plugin/marketplace.json` — makes this repo a single-plugin marketplace
 - `scripts/install.sh` — the one-command installer; `scripts/behavior_test.py` — the routing-test harness; `scripts/tests/` — the test suites
 - `docs/plugin-behavior-tests.md` — routing-test evidence; `docs/case-study-web-downloader.md` — one feature end to end on a real repo; `docs/carousel/` — the workflow as five slides for sharing
@@ -225,10 +225,12 @@ The senior-engineer layer was tested the same way: `foundations` surveyed a repo
 ## Tests
 
 ```bash
+scripts/test.sh                       # every suite below that this machine can run (--fast skips the sandbox one)
 scripts/tests/test_plugin.sh          # manifests validate, skills well-formed, Superpowers copies pinned
 scripts/tests/test_plugin_hook.sh     # the bootstrap hook against fixture homes and repos
+scripts/tests/test_hooks.sh           # the gate hooks fed JSON on stdin (PYTHON=/usr/bin/python3 for the system 3.9)
 scripts/tests/test_install.sh         # the installer's settings step, in a fixture home
 scripts/tests/test_prepare_run.sh     # the sandbox workspaces the routing tests run in
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'   # the gate module and the harness scanner
 python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --runs 5   # a routing test, headless
 ```

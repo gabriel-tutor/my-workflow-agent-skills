@@ -1,0 +1,334 @@
+"""The gate module (plugin/hooks/seams_gate.py), through its public functions.
+
+The gate refuses a change to the project until the current request has a declaration. These
+tests drive the module the way the hooks do: a shell command in, a label out; an event and a
+ledger in, a decision out. Expected values come from the spec (.scratch/seams-3/spec.md), not
+from the code.
+"""
+from __future__ import annotations
+
+import importlib.util
+import os
+import stat
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent.parent
+MODULE = REPO / "plugin" / "hooks" / "seams_gate.py"
+
+
+def load():
+    spec = importlib.util.spec_from_file_location("seams_gate", MODULE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+gate = load()
+
+
+class ClassifyCommand(unittest.TestCase):
+    """classify_command: a label for a shell command that changes files, None otherwise."""
+
+    MUTATIONS = {
+        "echo changed > src/file.ts": "a redirect to a file",
+        "cat <<'EOF' >> README.md\nline\nEOF": "a redirect to a file",
+        "sed -i 's/a/b/' src/file.ts": "sed -i",
+        "sed --in-place 's/a/b/' src/file.ts": "sed -i",
+        "perl -pi -e 's/a/b/' src/file.ts": "perl -i",
+        "rm -rf dist": "rm",
+        "mv a.ts b.ts": "mv",
+        "cp a.ts b.ts": "cp",
+        "touch src/new.ts": "touch",
+        "mkdir -p src/lib": "mkdir",
+        "tee src/out.txt": "tee",
+        "git add -A": "git add",
+        "git commit -m 'x'": "git commit",
+        "git checkout main": "git checkout",
+        "git reset --hard HEAD~1": "git reset",
+        "git push origin main": "git push",
+        "npm install left-pad": "npm install",
+        "pnpm add -D vitest": "pnpm add",
+        "pip install requests": "pip install",
+        "npx prettier --write .": "a --write flag",
+        "npx eslint --fix src": "a --fix flag",
+        "curl -o vendor.js https://example.com/x.js": "a download to a file",
+        "find . -name '*.tmp' -delete": "find -delete",
+        "python3 -c \"open('x.txt','w').write('hi')\"": "an inline program that writes",
+        "python3 - <<'PY'\nfrom pathlib import Path\nPath('x').write_text('hi')\nPY": "an inline program that writes",
+        "node -e \"require('fs').writeFileSync('x','y')\"": "an inline program that writes",
+        "git status && echo done > out.txt": "a redirect to a file",
+        "git stash": "git stash",
+        "git stash pop": "git stash",
+        "git tag v3.0.0": "git tag",
+        "git worktree add ../x": "git worktree",
+        "git branch -d old": "git branch -d",
+        "git -C sub commit -m x": "git commit",
+        "sudo rm -rf /tmp/x": "rm",
+        "xargs rm < list.txt": "rm",
+        "bash -c 'echo hi > out.txt'": "a redirect to a file",
+        "FOO=1 touch a": "touch",
+        "ls | tee listing.txt": "tee",
+    }
+
+    READS = [
+        "cat README.md",
+        "grep -rn 'gate' plugin/",
+        "git status --short",
+        "git diff HEAD~1",
+        "git log --oneline -5",
+        "npm test",
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "python3 -c 'print(1+1)'",
+        "python3 - <<'PY'\nprint('hello')\nPY",
+        "echo 'a > b' | grep '>'",
+        "ls -la 2>/dev/null",
+        "npm test 2>&1 | tail -5",
+        "make check &>/dev/null",
+        "which claude",
+        "sed -n '1,20p' README.md",
+        "find . -name '*.py'",
+        "curl -s https://example.com",
+        "git diff main...HEAD",
+        "git stash list",
+        "git tag -l",
+        "git tag --list 'v*'",
+        "git worktree list",
+        "git branch",
+        "git branch -a",
+        "git rev-parse HEAD",
+        "git merge-base main HEAD",
+        "git show HEAD:README.md",
+        "grep -rn 'rm -rf' docs/",
+    ]
+
+    def test_mutations_get_the_label_the_refusal_will_name(self):
+        for command, label in self.MUTATIONS.items():
+            with self.subTest(command=command):
+                self.assertEqual(gate.classify_command(command), label)
+
+    def test_read_only_commands_are_not_mutations(self):
+        for command in self.READS:
+            with self.subTest(command=command):
+                self.assertIsNone(gate.classify_command(command))
+
+
+class Declarations(unittest.TestCase):
+    """A declaration is a Seams skill or one of Matt Pocock's process skills; nothing else."""
+
+    def test_seams_and_matt_pocock_process_skills_declare(self):
+        for skill in ["matt-pocock-workflow:grill", "matt-pocock-workflow:trivial",
+                      "matt-pocock-workflow:implement", "grilling", "tdd", "diagnosing-bugs",
+                      "domain-modeling", "code-review", "codebase-design", "setup-pre-commit",
+                      "wayfinder", "to-spec", "implement"]:
+            with self.subTest(skill=skill):
+                self.assertTrue(gate.is_declaration(skill))
+
+    def test_other_plugins_and_domain_skills_do_not(self):
+        for skill in ["superpowers:brainstorming", "superpowers:test-driven-development",
+                      "frontend-design", "vercel:deploy", "pdf", "", "matt-pocock-workflow"]:
+            with self.subTest(skill=skill):
+                self.assertFalse(gate.is_declaration(skill))
+
+    def test_a_typed_slash_command_for_a_process_skill_declares(self):
+        self.assertEqual(gate.slash_declaration("/to-spec"), "to-spec")
+        self.assertEqual(gate.slash_declaration("/matt-pocock-workflow:grill add coupons"),
+                         "matt-pocock-workflow:grill")
+        self.assertEqual(gate.slash_declaration("/setup-matt-pocock-skills"), "setup-matt-pocock-skills")
+        self.assertEqual(gate.slash_declaration("  /wayfinder  "), "wayfinder")
+
+    def test_other_slash_commands_and_plain_prompts_do_not(self):
+        for prompt in ["/superpowers:brainstorming", "/compact", "/clear", "add a feature",
+                       "run /tdd on this", ""]:
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(gate.slash_declaration(prompt))
+
+
+class Continuations(unittest.TestCase):
+    """A short go-ahead keeps the request; anything else starts a new one."""
+
+    def test_go_aheads_and_bare_options_continue(self):
+        for prompt in ["yes", "Yes.", "y", "ok", "OK!", "okay", "sure", "go ahead", "go on",
+                       "continue", "proceed", "do it", "next", "approved", "confirmed",
+                       "sounds good", "looks good", "lgtm", "yes please", "yes, do that",
+                       "b", "2", "option 2", "carry on", "keep going"]:
+            with self.subTest(prompt=prompt):
+                self.assertTrue(gate.is_continuation(prompt))
+
+    def test_requests_start_a_new_request(self):
+        for prompt in ["add a feature to the cart", "fix the bug in pricing",
+                       "yes but also fix the bug in pricing and the tests", "no", "stop",
+                       "why did you do that?", "/to-spec", "ok now change the threshold to 1500",
+                       ""]:
+            with self.subTest(prompt=prompt):
+                self.assertFalse(gate.is_continuation(prompt))
+
+
+class Ledger(unittest.TestCase):
+    """One ledger per session under a root the hooks share; the current request lives in it."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+
+    def test_a_fresh_session_has_an_empty_request(self):
+        ledger = gate.load_ledger("s1", self.root)
+        self.assertEqual(ledger["declarations"], [])
+        self.assertEqual(ledger["changes"], [])
+        self.assertIsNone(ledger["verified_at"])
+
+    def test_a_declaration_survives_a_round_trip(self):
+        ledger = gate.load_ledger("s1", self.root)
+        gate.add_declaration(ledger, "matt-pocock-workflow:grill", agent_id="a1")
+        gate.save_ledger("s1", ledger, self.root)
+        again = gate.load_ledger("s1", self.root)
+        self.assertEqual([d["skill"] for d in again["declarations"]], ["matt-pocock-workflow:grill"])
+        self.assertEqual(again["declarations"][0]["agent"], "a1")
+
+    def test_a_new_request_clears_declarations_changes_and_verification(self):
+        ledger = gate.load_ledger("s1", self.root)
+        gate.add_declaration(ledger, "tdd")
+        gate.add_change(ledger, {"tool": "Edit", "path": "/p/src/a.ts", "doc": False})
+        gate.mark_verified(ledger)
+        gate.new_request(ledger)
+        self.assertEqual(ledger["declarations"], [])
+        self.assertEqual(ledger["changes"], [])
+        self.assertIsNone(ledger["verified_at"])
+
+    def test_reset_removes_the_session_file(self):
+        ledger = gate.load_ledger("s1", self.root)
+        gate.add_declaration(ledger, "tdd")
+        gate.save_ledger("s1", ledger, self.root)
+        gate.reset_ledger("s1", self.root)
+        self.assertEqual(gate.load_ledger("s1", self.root)["declarations"], [])
+
+    def test_the_file_and_directory_are_private_to_the_user(self):
+        gate.save_ledger("s1", gate.load_ledger("s1", self.root), self.root)
+        path = gate.ledger_path("s1", self.root)
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.dirname(path)).st_mode), 0o700)
+
+    def test_a_corrupt_file_reads_as_an_empty_request(self):
+        path = gate.ledger_path("s1", self.root)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Path(path).write_text("{not json")
+        self.assertEqual(gate.load_ledger("s1", self.root)["declarations"], [])
+
+    def test_cleanup_removes_ledgers_older_than_seven_days(self):
+        for session in ("old", "new"):
+            gate.save_ledger(session, gate.load_ledger(session, self.root), self.root)
+        old = gate.ledger_path("old", self.root)
+        stale = time.time() - 8 * 24 * 3600
+        os.utime(old, (stale, stale))
+        gate.cleanup_ledgers(self.root, days=7)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(gate.ledger_path("new", self.root)))
+
+    def test_the_default_root_is_a_seams_directory_in_the_temp_dir(self):
+        self.assertEqual(os.path.dirname(gate.ledger_path("s1")),
+                         os.path.join(tempfile.gettempdir(), "seams"))
+
+
+def event(tool: str, cwd: str = "/proj", agent_id: str = None, **tool_input: object) -> dict:
+    data = {"session_id": "s1", "cwd": cwd, "hook_event_name": "PreToolUse",
+            "tool_name": tool, "tool_input": tool_input}
+    if agent_id:
+        data["agent_id"] = agent_id
+    return data
+
+
+class ProjectChanges(unittest.TestCase):
+    """change_for_event: what the gate treats as a change to the project."""
+
+    def setUp(self):
+        self.config = tempfile.mkdtemp()
+
+    def change(self, ev):
+        return gate.change_for_event(ev, config_dir=self.config)
+
+    def test_editor_tools_on_project_files_are_changes(self):
+        change = self.change(event("Edit", file_path="/proj/src/a.ts", old_string="a", new_string="b"))
+        self.assertEqual(change["tool"], "Edit")
+        self.assertEqual(change["path"], "/proj/src/a.ts")
+        self.assertFalse(change["doc"])
+        self.assertEqual(self.change(event("NotebookEdit", notebook_path="/proj/n.ipynb"))["path"], "/proj/n.ipynb")
+
+    def test_relative_paths_resolve_against_the_session_cwd(self):
+        change = self.change(event("Write", file_path="README.md", content="x"))
+        self.assertEqual(change["path"], "/proj/README.md")
+
+    def test_markdown_is_a_documentation_change(self):
+        self.assertTrue(self.change(event("Write", file_path="/proj/docs/spec.md", content="x"))["doc"])
+        self.assertTrue(self.change(event("Edit", file_path="/proj/CONTEXT.md"))["doc"])
+        self.assertFalse(self.change(event("Edit", file_path="/proj/src/a.ts"))["doc"])
+
+    def test_temp_and_config_directories_are_not_the_project(self):
+        temp = os.path.join(tempfile.gettempdir(), "scratch", "x.py")
+        for path in [temp, "/tmp/x.py", "/private/tmp/claude-501/x/scratchpad/notes.md",
+                     os.path.join(self.config, "projects", "memory", "note.md"), "/dev/null"]:
+            with self.subTest(path=path):
+                self.assertIsNone(self.change(event("Write", file_path=path, content="x")))
+
+    def test_a_worktree_outside_the_cwd_is_still_the_project(self):
+        change = self.change(event("Edit", cwd="/proj", file_path="/proj.worktrees/feature/src/a.ts"))
+        self.assertIsNotNone(change)
+
+    def test_shell_mutations_are_changes_with_their_label(self):
+        change = self.change(event("Bash", command="echo x > src/a.ts"))
+        self.assertEqual(change["tool"], "Bash")
+        self.assertEqual(change["label"], "a redirect to a file")
+        self.assertFalse(change["doc"])
+        self.assertIsNone(self.change(event("Bash", command="cat src/a.ts")))
+
+    def test_other_tools_are_not_changes(self):
+        self.assertIsNone(self.change(event("Read", file_path="/proj/src/a.ts")))
+        self.assertIsNone(self.change(event("Grep", pattern="x")))
+
+
+class PreToolUseDecision(unittest.TestCase):
+    """decide_pre_tool_use: refuse a project change until the request has a declaration."""
+
+    def setUp(self):
+        self.config = tempfile.mkdtemp()
+        self.ledger = gate.empty_ledger("s1")
+
+    def decide(self, ev):
+        return gate.decide_pre_tool_use(ev, self.ledger, config_dir=self.config)
+
+    def test_a_change_without_a_declaration_is_refused_with_the_routes(self):
+        decision = self.decide(event("Edit", file_path="/proj/src/a.ts"))
+        self.assertEqual(decision["decision"], "deny")
+        reason = decision["reason"]
+        self.assertIn("Seams gate", reason)
+        self.assertIn("/proj/src/a.ts", reason)
+        for route in ["diagnosing-bugs", "matt-pocock-workflow:grill", "tdd",
+                      "matt-pocock-workflow:implement", "matt-pocock-workflow:trivial"]:
+            self.assertIn(route, reason)
+
+    def test_a_shell_mutation_without_a_declaration_is_refused_by_its_label(self):
+        decision = self.decide(event("Bash", command="sed -i 's/a/b/' src/a.ts"))
+        self.assertEqual(decision["decision"], "deny")
+        self.assertIn("sed -i", decision["reason"])
+
+    def test_a_change_with_a_declaration_is_allowed_and_recorded(self):
+        gate.add_declaration(self.ledger, "tdd")
+        decision = self.decide(event("Edit", file_path="/proj/src/a.ts"))
+        self.assertEqual(decision["decision"], "allow")
+        self.assertEqual(decision["change"]["path"], "/proj/src/a.ts")
+
+    def test_a_non_change_is_allowed_without_a_declaration(self):
+        self.assertEqual(self.decide(event("Read", file_path="/proj/src/a.ts"))["decision"], "allow")
+        self.assertEqual(self.decide(event("Bash", command="npm test"))["decision"], "allow")
+        self.assertEqual(self.decide(event("Write", file_path="/tmp/notes.txt", content="x"))["decision"], "allow")
+
+    def test_a_subagent_is_judged_by_the_same_ledger(self):
+        self.assertEqual(self.decide(event("Edit", agent_id="a1", file_path="/proj/src/a.ts"))["decision"], "deny")
+        gate.add_declaration(self.ledger, "matt-pocock-workflow:implement")
+        self.assertEqual(self.decide(event("Edit", agent_id="a1", file_path="/proj/src/a.ts"))["decision"], "allow")
+
+
+if __name__ == "__main__":
+    unittest.main()

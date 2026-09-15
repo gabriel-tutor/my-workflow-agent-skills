@@ -37,6 +37,13 @@ done
 grep -q "references/design-lens.md" "$PLUGIN/skills/grill/SKILL.md" || fail "grill does not reference the design lens"
 [[ $(grep -cE '^[0-9]+\. \*\*' "$PLUGIN/skills/grill/references/design-lens.md") -eq 10 ]] || fail "design lens should list 10 axes"
 
+# The trivial declaration: the cheap way through the gate, carrying the test of what is not trivial.
+TRIV="$PLUGIN/skills/trivial/SKILL.md"
+[[ -f "$TRIV" ]] || fail "trivial skill missing"
+for needle in "behavior" "data" "auth" "migration" "verification-before-completion" "grill" "diagnosing-bugs"; do
+  grep -qi "$needle" "$TRIV" || fail "trivial skill should mention: $needle"
+done
+
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
 for s in $KEPT; do [[ -f "$PLUGIN/skills/$s/SKILL.md" ]] || fail "missing copied skill: $s"; done
