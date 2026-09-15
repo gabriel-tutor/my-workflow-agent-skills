@@ -61,6 +61,13 @@ _Avoid_: scaffold, boilerplate, MVP
 An outage or degradation that users feel now. Contain and restore come before diagnosis.
 _Avoid_: bug, hotfix, emergency
 
+**Containing action**:
+The safest reversible action that stops users being affected, matched to what changed last; it stays in place until the fixed candidate runs.
+_Avoid_: mitigation, remediation, workaround
+
+**Outward action**:
+An action that reaches users or the host during an incident (a rollback, a redeploy, a config or flag change, a restart, a message to users); never taken without a yes that names it.
+
 **Post-mortem note**:
 The record of an incident under `docs/incidents/`: timeline, impact, cause, what stopped it, what prevents it, and the follow-up tickets.
 _Avoid_: RCA, incident report

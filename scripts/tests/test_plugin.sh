@@ -19,6 +19,12 @@ must_say() {   # $1 = skill name, $2 = file, $3... = phrases the file must conta
   local name="$1" file="$2" needle; shift 2
   for needle in "$@"; do grep -qF -- "$needle" "$file" || fail "$name should say: $needle"; done
 }
+section() { awk -v h="## $1" 'index($0, h) == 1 {p=1; next} /^## /{p=0} p' "$2"; }   # $1 = heading text, $2 = file: that section's body
+section_says() {   # $1 = skill name, $2 = file, $3 = heading text, $4... = phrases that section must contain verbatim
+  local name="$1" file="$2" heading="$3" body needle; shift 3
+  body=$(section "$heading" "$file"); [[ -n "$body" ]] || fail "$name lacks the section: ## $heading"
+  for needle in "$@"; do [[ $body == *"$needle"* ]] || fail "$name, under '## $heading', should say: $needle"; done
+}
 
 claude plugin validate --strict "$PLUGIN" >/dev/null || fail "plugin manifest does not validate"
 claude plugin validate --strict "$REPO" >/dev/null || fail "marketplace manifest does not validate"
@@ -43,8 +49,7 @@ done
 # each must keep; and a last line attributing the upstream skill, the MIT license and the commit
 # recorded in the notices.
 NOTICES="$PLUGIN/THIRD_PARTY_NOTICES.md"
-section() { awk -v h="## $1" 'index($0, h) == 1 {p=1; next} /^## /{p=0} p' "$NOTICES"; }   # one notices section's body
-MP_SECTION=$(section "Matt Pocock")
+MP_SECTION=$(section "Matt Pocock" "$NOTICES")
 [[ -n "$MP_SECTION" ]] || fail "no 'Matt Pocock' section in THIRD_PARTY_NOTICES.md"
 MP_COMMIT=$(grep -oE '\b[0-9a-f]{40}\b' <<< "$MP_SECTION" | sort -u) || fail "the notices name no upstream commit"
 [[ $(wc -l <<< "$MP_COMMIT") -eq 1 ]] || fail "the notices should name one upstream commit, got: $MP_COMMIT"
@@ -110,22 +115,24 @@ must_say foundations "$PLUGIN/skills/foundations/SKILL.md" "| Deploy target and 
   "published nowhere" "runbook" ".env.example" "platform's skill"
 
 # The incident skill (ticket 06): contain and restore before diagnosis, the seven steps in order,
-# every outward action behind a yes, the cause through diagnosing-bugs, the fix on the normal
-# route with its regression test first, the note under docs/incidents/, the stage in the handover.
+# and each step's rule inside its own section: the three facts and no cause; the safest reversible
+# action, every outward action behind a yes; verification before "no longer affected"; the cause
+# through diagnosing-bugs; the fix on the normal route, regression test first, through implement
+# and release; the note under docs/incidents/ with its follow-ups; the stage in the handover.
 INC="$PLUGIN/skills/incident/SKILL.md"
 [[ -f "$INC" ]] || fail "incident skill missing"
-headings_in_order incident "$INC" "## Impact" "## Contain" "## Restore and confirm" "## Diagnose" "## Fix" "## Post-mortem" "## Handover"
-must_say incident "$INC" "Who is affected" "Since when" "What changed last" "safest reversible action" \
-  "Ask before any outward action" "wait for the yes" "no longer affected" "Invoke \`diagnosing-bugs\`" \
-  "normal route" "regression test first" "docs/incidents/" "follow-up ticket" "Stage reached" \
-  "designed, built, integrated, release-ready, deployed, operated"
+headings_in_order incident "$INC" "## Impact" "## Contain" "## Restore and confirm" "## Diagnose" "## Fix" "## Post-mortem" "## Incident handover"
+section_says incident "$INC" Impact "Who is affected" "Since when" "What changed last" "no cause named here"
+section_says incident "$INC" Contain "safest reversible action" "Ask before any outward action" "wait for the yes" "do not guess"
+section_says incident "$INC" "Restore and confirm" "no longer affected" "matt-pocock-workflow:verification-before-completion"
+section_says incident "$INC" Diagnose "Invoke \`diagnosing-bugs\`" "first hypothesis"
+section_says incident "$INC" Fix "normal route" "regression test first" "matt-pocock-workflow:implement" "sensitive change" "matt-pocock-workflow:release"
+section_says incident "$INC" Post-mortem "docs/incidents/" "**Follow-ups**" "follow-up ticket" "ends before the fix"
+section_says incident "$INC" "Incident handover" "Stage reached" "designed, built, integrated, release-ready, deployed, operated"
 
 # The grill (ticket 06): a decision the code or an earlier answer already settles is not a question,
 # and the rule sits in the Presentation section, where the facts-then-one-question format is.
-GRILL="$PLUGIN/skills/grill/SKILL.md"
-awk '/^## Presentation$/{p=1; next} /^## /{p=0} p' "$GRILL" | grep -qF "already settles is not a question" \
-  || fail "grill's Presentation section lacks the settled-is-not-a-question rule"
-grep -qF "goes in the facts" "$GRILL" || fail "grill should say where a settled decision goes: the facts"
+section_says grill "$PLUGIN/skills/grill/SKILL.md" Presentation "already settles is not a question; the fact goes in the facts section"
 
 # The grill's design lens: present, and referenced from the grill.
 [[ -f "$PLUGIN/skills/grill/references/design-lens.md" ]] || fail "design-lens.md missing"
@@ -151,7 +158,7 @@ grep -qF "Superpowers overlaps" "$PLUGIN/skills/using-matt-pocock-skills/SKILL.m
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
 for s in $KEPT; do [[ -f "$PLUGIN/skills/$s/SKILL.md" ]] || fail "missing copied skill: $s"; done
-SP_SUMS=$(grep -E '^[0-9a-f]{64}  skills/[a-z-]+/SKILL\.md$' <<< "$(section Superpowers)") \
+SP_SUMS=$(grep -E '^[0-9a-f]{64}  skills/[a-z-]+/SKILL\.md$' <<< "$(section Superpowers "$NOTICES")") \
   || fail "no checksums in the Superpowers section of THIRD_PARTY_NOTICES.md"
 [[ $(wc -l <<< "$SP_SUMS") -eq 4 ]] || fail "expected 4 recorded checksums, got: $SP_SUMS"
 (cd "$PLUGIN" && shasum -a 256 -c <<< "$SP_SUMS" >/dev/null) || fail "a copied skill differs from its recorded checksum"
