@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""SessionStart hook for the matt-pocock-workflow plugin.
+
+Injects the using-matt-pocock-skills bootstrap at startup, /clear and compaction, the way
+Superpowers injects using-superpowers, so the routing policy is in context from turn one.
+
+Reads the SessionStart event on stdin and prints {"hookSpecificOutput": {...}}: the bootstrap
+body, with ${CLAUDE_PLUGIN_ROOT} replaced by the plugin's path so it can point at its own
+reference files, then a "This session" section. That section says where Matt Pocock's skills
+are installed, so the plugin's pointer skills can read them, and nudges toward
+the foundations skill when the working repo has no docs/agents/issue-tracker.md.
+Any error prints nothing and exits 0.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent
+# The root Claude Code runs this plugin from. It supplies CLAUDE_PLUGIN_ROOT; for a plugin
+# installed from a local directory that is the directory itself, not the cache copy, so the
+# paths injected below must come from it. The hook's own location is only the fallback for
+# direct runs (tests).
+PLUGIN = Path(os.environ.get("CLAUDE_PLUGIN_ROOT") or HERE)
+BOOTSTRAP = HERE / "skills" / "using-matt-pocock-skills" / "SKILL.md"
+
+PREAMBLE = "Your `matt-pocock-workflow:using-matt-pocock-skills` skill, this session's routing policy:"
+
+
+def without_frontmatter(text: str) -> str:
+    """The skill body: everything after the leading --- frontmatter block, if there is one."""
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            return text[end + len("\n---\n"):].strip()
+    return text.strip()
+
+
+def mp_line(home: Path) -> str:
+    """Where Matt Pocock's skills live, so the plugin's pointer skills can read them."""
+    skills = home / ".claude" / "skills"
+    if (skills / "grilling" / "SKILL.md").is_file():
+        return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
+    return ("- Matt Pocock's skills are not installed: ask the user to run "
+            "`npx skills add mattpocock/skills`, then start a new session.")
+
+
+def repo_root(start: Path) -> Path | None:
+    """The nearest directory at or above `start` holding a .git entry (a repo or a worktree)."""
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+    return None
+
+
+def setup_line(cwd: Path) -> str | None:
+    """A nudge toward the foundations skill when the repo lacks MP's issue-tracker config."""
+    root = repo_root(cwd)
+    if root is None or (root / "docs" / "agents" / "issue-tracker.md").is_file():
+        return None
+    return ("- No `docs/agents/issue-tracker.md` here: offer `matt-pocock-workflow:foundations` "
+            "before the first spec, tickets, review or triage.")
+
+
+def main() -> int:
+    try:
+        event = json.loads(sys.stdin.read())
+        cwd = Path(event.get("cwd") or os.getcwd())
+        body = without_frontmatter(BOOTSTRAP.read_text()).replace("${CLAUDE_PLUGIN_ROOT}", str(PLUGIN))
+        lines = (mp_line(Path.home()), setup_line(cwd))
+        session = "## This session\n" + "\n".join(line for line in lines if line)
+        context = ("<EXTREMELY_IMPORTANT>\n" + PREAMBLE + "\n\n" + body + "\n\n" + session
+                   + "\n</EXTREMELY_IMPORTANT>")
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": context,
+        }}))
+    except Exception:
+        pass                                   # fail open: never block or clutter a session start
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,10 @@
+# OS / editor
+.DS_Store
+__pycache__/
+*.pyc
+
+# Node (the sandbox project installs locally)
+node_modules/
+
+# Routing-test run workspaces: fresh copies of tests/fixture, reproducible from it
+tests/runs/
