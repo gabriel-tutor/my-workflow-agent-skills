@@ -29,6 +29,12 @@ which starts with `Seams gate:`), or a change that failed, changed nothing, so i
   behavior_test.py judge RESULTS.jsonl [...]
       The same judgement on saved records.
 
+  behavior_test.py report RESULTS.jsonl [...]
+      The counts docs/plugin-behavior-tests.md carries, from saved records, as Markdown: one
+      row per scenario (runs, matched, runs with a refusal, failed calls, errors), the runs
+      that did not match under it with the judge's reason, and the candidate and model the
+      records name. Exits 1 only when a scenario has no expectation file.
+
   behavior_test.py scan [--past-skill] [--workspace DIR] STREAM
       Prints the record for a saved stream-json file.
 
@@ -473,6 +479,42 @@ def judge_records(records: list) -> "tuple[bool, str]":
     return ok, "\n".join(lines)
 
 
+def report_records(records: list) -> "tuple[bool, str]":
+    """The counts docs/plugin-behavior-tests.md carries, from the records, so the document
+    cannot say more than they do: a Markdown table with one row per scenario (runs, matched,
+    runs with a refusal, failed calls, errors), the runs that did not match listed under it
+    with the judge's reason, and the candidates and models the records name. False when a
+    scenario has no expectation file."""
+    by_scenario: dict = {}
+    for r in records:
+        by_scenario.setdefault(r.get("scenario"), []).append(r)
+    candidates = sorted({r.get("candidate") for r in records if r.get("candidate")})
+    models = sorted({r.get("model") for r in records if r.get("model")})
+    named = lambda items: ", ".join(f"`{i}`" for i in items) or "unknown"  # noqa: E731
+    lines = [f"Candidate: {named(candidates)}; model: {named(models)}; {len(records)} runs.", "",
+             "| Scenario | Expected first skill | Runs | Matched | Refused | Failed calls | Errors |",
+             "| --- | --- | --- | --- | --- | --- | --- |"]
+    notes, ok = [], True
+    for scenario, runs in by_scenario.items():
+        expect = expectation(scenario or "")
+        if expect is None:
+            lines.append(f"| `{scenario}` | no expectation file (tests/scenarios/{scenario}/expect.json) "
+                         f"| {len(runs)} | | | | |")
+            ok = False
+            continue
+        outcomes = [(r, *judge_run(r, expect)) for r in runs]
+        matched = sum(1 for _, kind, _ in outcomes if kind == "match")
+        errors = sum(1 for _, kind, _ in outcomes if kind == "error")
+        refused = sum(1 for r in runs if r.get("refusals"))
+        failed = sum(r.get("failed_calls") or 0 for r in runs)
+        lines.append(f"| `{scenario}` | {' or '.join(f'`{s}`' for s in expect['skill'])} | {len(runs)} "
+                     f"| {matched} | {refused} | {failed} | {errors} |")
+        notes += [f"- `{scenario}` run {r.get('run')}: {kind}, {why}" for r, kind, why in outcomes if kind != "match"]
+    if notes:
+        lines += ["", "Runs that did not match:", ""] + notes
+    return ok, "\n".join(lines)
+
+
 def print_summary(label: str, arm: str, out: Path, records: list) -> None:
     print(f"{label} [{arm}] x{len(records)} -> {out}")
     for r in records:
@@ -537,6 +579,8 @@ def main(argv: Optional[list] = None) -> int:
     scan_p.add_argument("stream", type=Path)
     judge_p = sub.add_parser("judge", help="judge saved results.jsonl records against their expectation files")
     judge_p.add_argument("results", type=Path, nargs="+")
+    report_p = sub.add_parser("report", help="the docs' counts table, as Markdown, from saved results.jsonl records")
+    report_p.add_argument("results", type=Path, nargs="+")
     run_p = sub.add_parser("run", help="run headless sessions and record their first commits")
     run_p.add_argument("--scenario", action="append", required=True,
                        help="a scenario under tests/scenarios (repeatable), or `all`")
@@ -557,11 +601,11 @@ def main(argv: Optional[list] = None) -> int:
     if args.cmd == "scan":
         print(json.dumps(scan(args.stream, args.past_skill, args.workspace)))
         return 0
-    if args.cmd == "judge":
+    if args.cmd in ("judge", "report"):
         records = [json.loads(line) for path in args.results for line in path.read_text().splitlines()
                    if line.strip()]
-        ok, report = judge_records(records)
-        print(report)
+        ok, text = (judge_records if args.cmd == "judge" else report_records)(records)
+        print(text)
         return 0 if ok else 1
 
     if args.scenario == ["all"]:

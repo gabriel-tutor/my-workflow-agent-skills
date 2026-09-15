@@ -2,7 +2,7 @@
 
 **Design at the seams. Build in slices.**
 
-[![version](https://img.shields.io/badge/plugin-2.1.2-4F46E5)](CHANGELOG.md) [![license](https://img.shields.io/badge/license-MIT-2563EB)](plugin/LICENSE) [![tested](https://img.shields.io/badge/behavior%20tests-passing-16A34A)](docs/plugin-behavior-tests.md)
+[![version](https://img.shields.io/badge/plugin-3.0.0-4F46E5)](CHANGELOG.md) [![license](https://img.shields.io/badge/license-MIT-2563EB)](plugin/LICENSE) [![tested](https://img.shields.io/badge/behavior%20tests-passing-16A34A)](docs/plugin-behavior-tests.md)
 
 Seams is a Claude Code plugin (plugin id `matt-pocock-workflow`) that makes [Matt Pocock's engineering skills](https://github.com/mattpocock/skills) lead every session, the way Superpowers does for its own skills: a session bootstrap that routes each development task, a grill that asks one clickable question at a time, gated spec, tickets and implement steps, and a senior-engineer layer around them (design lens, definition of done, handover, repo foundations).
 

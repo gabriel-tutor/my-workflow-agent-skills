@@ -29,6 +29,15 @@ section_says() {   # $1 = skill name, $2 = file, $3 = heading text, $4... = phra
 claude plugin validate --strict "$PLUGIN" >/dev/null || fail "plugin manifest does not validate"
 claude plugin validate --strict "$REPO" >/dev/null || fail "marketplace manifest does not validate"
 
+# One version everywhere (ticket 10): the two manifests, the README's version badge and the
+# CHANGELOG's first entry name the same release, so a bump cannot land in one place only.
+V_PLUGIN=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$PLUGIN/.claude-plugin/plugin.json")
+V_MARKET=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["plugins"][0]["version"])' "$REPO/.claude-plugin/marketplace.json")
+V_README=$(grep -oE 'badge/plugin-[0-9]+\.[0-9]+\.[0-9]+' "$REPO/README.md" | head -1 | cut -d- -f2)
+V_CHANGELOG=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO/CHANGELOG.md" | cut -d' ' -f2)
+[[ -n $V_PLUGIN && $V_PLUGIN == "$V_MARKET" && $V_PLUGIN == "$V_README" && $V_PLUGIN == "$V_CHANGELOG" ]] \
+  || fail "versions disagree: plugin.json $V_PLUGIN, marketplace.json $V_MARKET, README badge $V_README, CHANGELOG $V_CHANGELOG"
+
 # Every skill: frontmatter naming its own directory, a description, and model invocation left on.
 for f in "$PLUGIN"/skills/*/SKILL.md; do
   python3 - "$f" <<'PY' || fail "bad frontmatter: $f"

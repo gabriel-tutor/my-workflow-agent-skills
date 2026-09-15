@@ -425,6 +425,55 @@ class JudgeTest(unittest.TestCase):
         self.assertIn("expect.json", report)
 
 
+def report(*records: dict) -> "tuple[int, str]":
+    """`behavior_test.py report results.jsonl`: the exit status and the Markdown it prints."""
+    with tempfile.TemporaryDirectory() as d:
+        results = Path(d) / "results.jsonl"
+        results.write_text("".join(json.dumps(r) + "\n" for r in records))
+        out = subprocess.run([sys.executable, str(HARNESS), "report", str(results)], capture_output=True, text=True)
+    return out.returncode, out.stdout + out.stderr
+
+
+class ReportTest(unittest.TestCase):
+    """The counts docs/plugin-behavior-tests.md carries come from the records by one command: a
+    table row per scenario (runs, matched, runs with a refusal, failed calls, errors), the runs
+    that did not match listed under it with the judge's reason, and the candidate and model the
+    records name, so the document cannot say more than the records do."""
+
+    TRIVIAL = "matt-pocock-workflow:trivial"
+
+    def test_the_table_counts_each_scenario_from_its_records(self):
+        code, out = report(
+            record("cosmetic-edit", 1, skill=self.TRIVIAL, candidate="abc1234", model="claude-opus-5"),
+            record("cosmetic-edit", 2, skill="matt-pocock-workflow:grill", candidate="abc1234", model="claude-opus-5"),
+            record("gate-typo", 1, skill=self.TRIVIAL, first_tool="Edit", refusals=1, failed_calls=1,
+                   candidate="abc1234", model="claude-opus-5"),
+            record("gate-typo", 2, skill=self.TRIVIAL, first_tool="Edit", refusals=1, timed_out=True, ended="timeout",
+                   candidate="abc1234", model="claude-opus-5"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("| `cosmetic-edit` | `matt-pocock-workflow:trivial` | 2 | 1 | 0 | 0 | 0 |", out)
+        self.assertIn("| `gate-typo` | `matt-pocock-workflow:trivial` | 2 | 1 | 2 | 1 | 1 |", out)
+        self.assertRegex(out, r"`cosmetic-edit` run 2: miss, first skill matt-pocock-workflow:grill, expected")
+        self.assertRegex(out, r"`gate-typo` run 2: error, timed out")
+        self.assertIn("`abc1234`", out)
+        self.assertIn("`claude-opus-5`", out)
+
+    def test_several_candidates_or_models_are_all_named(self):
+        code, out = report(record("cosmetic-edit", 1, skill=self.TRIVIAL, candidate="abc1234", model="claude-opus-5"),
+                           record("cosmetic-edit", 2, skill=self.TRIVIAL, candidate="def5678", model="claude-opus-5-1"))
+        self.assertEqual(code, 0, out)
+        self.assertIn("`abc1234`", out)
+        self.assertIn("`def5678`", out)
+        self.assertIn("`claude-opus-5`", out)
+        self.assertIn("`claude-opus-5-1`", out)
+
+    def test_a_scenario_without_an_expectation_file_is_reported_not_counted(self):
+        code, out = report(record("no-such-scenario", 1, skill=self.TRIVIAL))
+        self.assertEqual(code, 1, out)
+        self.assertIn("no-such-scenario", out)
+        self.assertIn("expect.json", out)
+
+
 class ScenarioFilesTest(unittest.TestCase):
     """Every scenario the harness can run carries a prompt, a setup and an expectation whose
     first skill is a declaration (a Seams skill or one of Matt Pocock's process skills)."""
