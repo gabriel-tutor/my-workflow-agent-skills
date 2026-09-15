@@ -16,7 +16,7 @@ It stays trivial only while all four hold:
 3. **Nothing sensitive.** It does not touch auth, permissions, secrets, billing, migrations, infrastructure, CI or deploy configuration, a public API, or anything destructive. A one-line change there is not trivial.
 4. **Reversible in one commit**, with nothing to migrate back.
 
-If any of the four fails, stop and route up: `matt-pocock-workflow:grill` for a change to behavior or shape, `diagnosing-bugs` for something broken, `matt-pocock-workflow:incident` for something down. Complexity found mid-edit moves you up a row, never down.
+If any of the four fails, stop and route up: `matt-pocock-workflow:grill` for a change to behavior or shape, `diagnosing-bugs` for something broken. Complexity found mid-edit moves you up a row, never down.
 
 ## Then
 

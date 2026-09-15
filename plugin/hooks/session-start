@@ -7,9 +7,10 @@ Superpowers injects using-superpowers, so the routing policy is in context from 
 Reads the SessionStart event on stdin and prints {"hookSpecificOutput": {...}}: the bootstrap
 body, with ${CLAUDE_PLUGIN_ROOT} replaced by the plugin's path so it can point at its own
 reference files, then a "This session" section. That section says where Matt Pocock's skills
-are installed, so the plugin's pointer skills can read them, and nudges toward
+are installed, so the plugin's flow skills can read them, and nudges toward
 the foundations skill when the working repo has no docs/agents/issue-tracker.md.
-Any error prints nothing and exits 0. Python 3.9: macOS's system interpreter may run this.
+Also keeps the gate's ledger: a new session or /clear starts with an empty one.
+Fails open (see seams_gate.run_hook). Python 3.9: macOS's system interpreter may run this.
 """
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+try:
+    import seams_gate as gate                  # the ledger; the bootstrap must inject without it
+except Exception:                              # noqa: BLE001
+    gate = None
 
 HERE = Path(__file__).resolve().parent.parent
 # The root Claude Code runs this plugin from. It supplies CLAUDE_PLUGIN_ROOT; for a plugin
@@ -41,7 +46,7 @@ def without_frontmatter(text: str) -> str:
 
 
 def mp_line(home: Path) -> str:
-    """Where Matt Pocock's skills live, so the plugin's pointer skills can read them."""
+    """Where Matt Pocock's skills live, so the plugin's flow skills can read them."""
     skills = home / ".claude" / "skills"
     if (skills / "grilling" / "SKILL.md").is_file():
         return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
@@ -68,35 +73,37 @@ def setup_line(cwd: Path) -> str | None:
 
 def ledger_housekeeping(event: dict) -> None:
     """A new session or /clear starts with an empty ledger; compaction keeps it; old ones go."""
-    import seams_gate as gate
+    if gate is None:
+        return
     session = event.get("session_id") or ""
     if event.get("source") in ("startup", "clear"):
         gate.reset_ledger(session)
     gate.cleanup_ledgers()
 
 
-def main() -> int:
-    try:
-        event = json.loads(sys.stdin.read())
-    except Exception:
-        return 0                               # fail open: nothing to inject, nothing to sweep
+def handle(event: dict) -> dict:
     try:
         ledger_housekeeping(event)
+    except Exception:                          # the bootstrap still gets injected below
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+    cwd = Path(event.get("cwd") or os.getcwd())
+    body = without_frontmatter(BOOTSTRAP.read_text()).replace("${CLAUDE_PLUGIN_ROOT}", str(PLUGIN))
+    lines = (mp_line(Path.home()), setup_line(cwd))
+    session = "## This session\n" + "\n".join(line for line in lines if line)
+    context = ("<EXTREMELY_IMPORTANT>\n" + PREAMBLE + "\n\n" + body + "\n\n" + session
+               + "\n</EXTREMELY_IMPORTANT>")
+    return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}
+
+
+def main() -> int:
+    if gate is not None:
+        return gate.run_hook(handle)
+    try:                                       # the same frame, without the module
+        print(json.dumps(handle(json.loads(sys.stdin.read() or "{}"))))
     except Exception:
-        pass                                   # the bootstrap still gets injected below
-    try:
-        cwd = Path(event.get("cwd") or os.getcwd())
-        body = without_frontmatter(BOOTSTRAP.read_text()).replace("${CLAUDE_PLUGIN_ROOT}", str(PLUGIN))
-        lines = (mp_line(Path.home()), setup_line(cwd))
-        session = "## This session\n" + "\n".join(line for line in lines if line)
-        context = ("<EXTREMELY_IMPORTANT>\n" + PREAMBLE + "\n\n" + body + "\n\n" + session
-                   + "\n</EXTREMELY_IMPORTANT>")
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context,
-        }}))
-    except Exception:
-        pass                                   # fail open: never block or clutter a session start
+        import traceback
+        traceback.print_exc(file=sys.stderr)
     return 0
 
 

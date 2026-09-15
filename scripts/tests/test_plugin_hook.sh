@@ -11,7 +11,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 # A fixture copy of the plugin whose bootstrap body is a known literal.
 FIX="$TMP/plugin"
 mkdir -p "$FIX/hooks" "$FIX/skills/using-matt-pocock-skills"
-cp "$HOOK" "$FIX/hooks/session-start"
+cp "$HOOK" "$FIX/hooks/session-start"; cp "$REPO/plugin/hooks/seams_gate.py" "$FIX/hooks/"
 cat > "$FIX/skills/using-matt-pocock-skills/SKILL.md" <<'MD'
 ---
 name: using-matt-pocock-skills
@@ -83,19 +83,21 @@ C=$(cd "$REPO_UNSET" && HOME="$MP_HOME" "$FIX/hooks/session-start" <<< '{}' \
   || fail "hook failed on an event without cwd"
 [[ "$C" == *"matt-pocock-workflow:foundations"* ]] || fail "no fallback to the process working directory: $C"
 
-# Fail open: bad input or a broken plugin prints nothing, on stdout or stderr, and exits 0.
+# Fail open: bad input or a broken plugin prints nothing on stdout and exits 0; the traceback
+# goes to stderr, which Claude Code keeps for the debug log and never shows the user.
 OUT=$(HOME="$MP_HOME" "$FIX/hooks/session-start" <<< 'not json' 2> "$TMP/err") \
   || fail "hook exited non-zero on garbage stdin"
-[[ -z "$OUT" && ! -s "$TMP/err" ]] || fail "hook was not silent on garbage stdin: $OUT $(cat "$TMP/err")"
+[[ -z "$OUT" ]] || fail "hook printed to stdout on garbage stdin: $OUT"
+grep -q 'Traceback' "$TMP/err" || fail "hook should write the traceback to stderr on garbage stdin"
 BROKEN="$TMP/broken"; cp -R "$FIX" "$BROKEN"; rm "$BROKEN/skills/using-matt-pocock-skills/SKILL.md"
 OUT=$(HOME="$MP_HOME" "$BROKEN/hooks/session-start" <<< '{}' 2> "$TMP/err") \
   || fail "hook exited non-zero without its bootstrap file"
-[[ -z "$OUT" && ! -s "$TMP/err" ]] || fail "hook was not silent without its bootstrap file: $OUT $(cat "$TMP/err")"
+[[ -z "$OUT" ]] || fail "hook printed to stdout without its bootstrap file: $OUT"
 UNREADABLE="$TMP/unreadable"; cp -R "$FIX" "$UNREADABLE"; chmod 000 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"
 if [[ ! -r "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md" ]]; then   # root can read anything
   OUT=$(HOME="$MP_HOME" "$UNREADABLE/hooks/session-start" <<< '{}' 2> "$TMP/err") \
     || fail "hook exited non-zero with an unreadable bootstrap file"
-  [[ -z "$OUT" && ! -s "$TMP/err" ]] || fail "hook was not silent with an unreadable bootstrap file: $OUT $(cat "$TMP/err")"
+  [[ -z "$OUT" ]] || fail "hook printed to stdout with an unreadable bootstrap file: $OUT"
 fi
 chmod 644 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"   # so the trap can remove it
 
@@ -106,5 +108,12 @@ for H in "$MP_HOME" "$BARE_HOME"; do
   N=$(printf '%s' "$C" | wc -c | tr -d ' ')
   (( N <= 3000 )) || fail "injection is $N bytes, over the 3,000-byte budget (HOME=$H)"
 done
+
+# The bootstrap injects even when the gate module is missing beside the hook (the ledger is
+# skipped, the traceback goes to stderr, the context still comes out).
+LONE="$TMP/lone"; mkdir -p "$LONE/hooks"; cp -R "$FIX/skills" "$LONE/skills"; cp "$HOOK" "$LONE/hooks/session-start"
+C=$(printf '{"cwd":"%s","source":"startup","session_id":"lone"}' "$PLAIN" | CLAUDE_PLUGIN_ROOT="$LONE" HOME="$MP_HOME" "$LONE/hooks/session-start" 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])')
+grep -q 'Fixture routing policy line' <<< "$C" || fail "bootstrap should inject without seams_gate.py"
 
 echo "test_plugin_hook: OK"

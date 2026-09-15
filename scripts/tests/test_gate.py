@@ -71,6 +71,27 @@ class ClassifyCommand(unittest.TestCase):
         "xargs rm < list.txt": "rm",
         "bash -c 'echo hi > out.txt'": "a redirect to a file",
         "FOO=1 touch a": "touch",
+        "sudo -u bob rm x": "rm",
+        "env FOO=1 rm -rf x": "rm",
+        "xargs -I{} rm {} < list.txt": "rm",
+        "timeout 5 touch a": "touch",
+        "nice -n 10 mkdir out": "mkdir",
+        "sed -ni 's/a/b/' f": "sed -i",
+        "sed -Ei 's/a/b/' f": "sed -i",
+        "perl -0pi -e 's/a/b/' f": "perl -i",
+        "gofmt -w .": "a --write flag",
+        "shfmt -w scripts": "a --write flag",
+        "goimports -w main.go": "a --write flag",
+        "perl -e 'open(F, \">out.txt\"); print F 1'": "an inline program that writes",
+        "perl -e 'unlink(\"x\")'": "an inline program that writes",
+        "ruby -e 'FileUtils.rm_rf(\"dist\")'": "an inline program that writes",
+        "ruby -e 'File.delete(\"x\")'": "an inline program that writes",
+        "node -e \"require('fs').rm('x', ()=>{})\"": "an inline program that writes",
+        "python3 -c \"import os; os.replace('a','b')\"": "an inline program that writes",
+        "uv pip install requests": "uv pip install",
+        "git tag v3.0.0 -m release": "git tag",
+        "git worktree add ../x": "git worktree",
+        "git worktree remove ../x": "git worktree",
         "ls | tee listing.txt": "tee",
     }
 
@@ -104,6 +125,17 @@ class ClassifyCommand(unittest.TestCase):
         "git merge-base main HEAD",
         "git show HEAD:README.md",
         "grep -rn 'rm -rf' docs/",
+        "grep -w foo file",
+        "ruby -Ilib test.rb",
+        "perl -MList::Util -e 'print 1'",
+        "perl -Ilib script.pl",
+        "python3 -c \"import shutil; print(shutil.which('x'))\"",
+        "uv pip list",
+        "uv pip freeze",
+        "git tag",
+        "git tag -n",
+        "git worktree prune",
+        "git worktree list",
     ]
 
     def test_mutations_get_the_label_the_refusal_will_name(self):
@@ -115,6 +147,16 @@ class ClassifyCommand(unittest.TestCase):
         for command in self.READS:
             with self.subTest(command=command):
                 self.assertIsNone(gate.classify_command(command))
+
+
+class LabelsAreFixedText(unittest.TestCase):
+    """A label is a fixed string: nothing typed after a command ever reaches the ledger."""
+
+    def test_labels_come_from_a_fixed_vocabulary(self):
+        for command in ["uv pip SECRETWORD x", "npm SECRETWORD", "git SECRETWORD", "pip SECRETWORD"]:
+            with self.subTest(command=command):
+                label = gate.classify_command(command)
+                self.assertTrue(label is None or "SECRETWORD" not in label, label)
 
 
 class Declarations(unittest.TestCase):
@@ -161,6 +203,9 @@ class Continuations(unittest.TestCase):
 
     def test_requests_start_a_new_request(self):
         for prompt in ["add a feature to the cart", "fix the bug in pricing",
+                       "please add a login page", "do the auth migration now", "keep the old API",
+                       "ok delete the users table", "sure, drop the column", "continue with the refactor",
+                       "next: add the endpoint", "please fix the login bug", "right, remove it",
                        "yes but also fix the bug in pricing and the tests", "no", "stop",
                        "why did you do that?", "/to-spec", "ok now change the threshold to 1500",
                        ""]:

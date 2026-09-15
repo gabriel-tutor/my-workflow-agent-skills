@@ -3,34 +3,27 @@
 
 A short go-ahead ("yes", "ok, do that") keeps the current request. A typed slash command for
 a process skill starts a new request already declared. The prompt text itself is never
-stored. Prints nothing. Any error exits 0 (fail open) with the traceback on stderr.
+stored. Prints nothing. Fails open (see seams_gate.run_hook).
 """
-import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import seams_gate as gate  # noqa: E402
 
 
-def main() -> int:
-    try:
-        import seams_gate as gate
-        event = json.loads(sys.stdin.read() or "{}")
-        prompt = event.get("prompt") or ""
-        session = event.get("session_id") or ""
-        declared = gate.slash_declaration(prompt)
-        if declared is None and gate.is_continuation(prompt):
-            return 0
-        ledger = gate.load_ledger(session)
-        gate.new_request(ledger)
-        if declared:
-            gate.add_declaration(ledger, declared)
-        gate.save_ledger(session, ledger)
-    except Exception:                                  # fail open
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-    return 0
-
+def handle(event: dict):
+    prompt = event.get("prompt") or ""
+    session = event.get("session_id") or ""
+    declared = gate.slash_declaration(prompt)
+    if declared is None and gate.is_continuation(prompt):
+        return None
+    ledger = gate.load_ledger(session)
+    gate.new_request(ledger)
+    if declared:
+        gate.add_declaration(ledger, declared)
+    gate.save_ledger(session, ledger)
+    return None
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(gate.run_hook(handle))

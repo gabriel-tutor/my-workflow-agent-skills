@@ -9,38 +9,62 @@ the hooks when nothing newer is first on PATH.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
+import sys
 import tempfile
-from typing import Optional
+import time
+import traceback
+from typing import Callable, Optional
 
 # --- Shell commands -----------------------------------------------------------------------
+# A best-effort mesh: the common ways of changing files from a shell. It never proves a
+# command has no side effects. Every label is fixed text, so nothing typed reaches the ledger.
 
 FILE_COMMANDS = {"rm", "rmdir", "unlink", "mv", "cp", "touch", "mkdir", "ln", "chmod", "chown",
                  "truncate", "tee", "install", "dd", "patch", "shred"}
 GIT_WRITES = {"add", "commit", "rm", "mv", "checkout", "switch", "restore", "reset", "rebase",
               "merge", "cherry-pick", "revert", "apply", "am", "clean", "push", "pull", "init",
               "clone"}
-GIT_READ_FLAGS = {"stash": {"list", "show"}, "tag": {"-l", "--list"}, "worktree": {"list"}}
+GIT_STASH_READS = {"list", "show"}
+GIT_TAG_READ_FLAGS = {"-l", "--list", "-n"}
+GIT_WORKTREE_WRITES = {"add", "remove", "move"}
 GIT_BRANCH_WRITE_FLAGS = {"-d", "-D", "-m", "-M", "--delete", "--move", "--force"}
 NODE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
 NODE_WRITES = {"install", "i", "add", "remove", "rm", "uninstall", "un", "update", "up", "upgrade",
                "link", "unlink", "init", "create", "ci", "dedupe", "prune"}
 OTHER_MANAGERS = {"pip": {"install", "uninstall"}, "pip3": {"install", "uninstall"},
-                  "uv": {"add", "remove", "sync", "pip"}, "poetry": {"add", "remove", "install", "update"},
+                  "uv": {"add", "remove", "sync"}, "poetry": {"add", "remove", "install", "update"},
                   "cargo": {"add", "remove", "install"}, "go": {"get", "install"},
                   "gem": {"install", "uninstall"}}
-WRAPPERS = {"sudo", "env", "time", "nice", "nohup", "command", "exec", "xargs"}
+UV_PIP_WRITES = {"install", "uninstall", "sync"}
+FORMATTERS = {"prettier", "biome", "gofmt", "goimports", "gofumpt", "shfmt"}
+# Wrappers that run another command; the flags that take a value; positional counts to skip.
+WRAPPERS = {"sudo", "env", "time", "nice", "nohup", "command", "exec", "xargs", "timeout", "doas"}
+WRAPPER_VALUE_FLAGS = {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-n", "-I", "-L", "-P", "-s",
+                       "-a", "-E", "-k"}
+WRAPPER_POSITIONALS = {"timeout": 1}
 INTERPRETERS = re.compile(r"^(python[0-9.]*|node|ruby|perl|deno|bun)$")
 INLINE_FLAGS = {"-c", "-e", "--eval", "-p", "--print", "-"}
+SED_IN_PLACE = re.compile(r"^(-[a-zA-Z]*i|--in-place)")
+PERL_RUBY_IN_PLACE = re.compile(r"^-[a-z0-9]*i")        # -i, -pi, -0pi; not -Ilib, not -MList::Util
 WRITE_PATTERNS = re.compile(
-    r"open\([^)]*['\"][wax]b?\+?['\"]|mode\s*=\s*['\"][wax]|\.write_text\(|\.write_bytes\(|\.writelines\("
-    r"|writeFile(Sync)?\(|appendFile(Sync)?\(|os\.remove\(|os\.unlink\(|\.unlink\(|os\.rename\("
-    r"|\.rename\(|shutil\.|os\.makedirs\(|\.mkdir\(|rmSync\(|rmdirSync\(|unlinkSync\(|renameSync\("
-    r"|mkdirSync\(|copyFile|File\.write|File\.open\([^)]*['\"][wa]|IO\.write|\.truncate\(")
-FD_DUP = re.compile(r"^\d*>&")
+    r"open\([^)]*['\"][wax]b?\+?['\"]"          # open(path, 'w') / 'a' / 'x' in any language
+    r"|open\([^)]*['\"]>"                          # perl: open(F, ">out")
+    r"|mode\s*=\s*['\"][wax]"
+    r"|\.write_text\(|\.write_bytes\(|\.writelines\("
+    r"|\bwriteFile(Sync)?\(|\bappendFile(Sync)?\(|createWriteStream\("
+    r"|\.rm\(|\.rmdir\(|\brmSync\(|\brmdirSync\(|\bunlinkSync\(|\brenameSync\(|\bmkdirSync\(|copyFile"
+    r"|os\.(remove|unlink|rename|replace|rmdir|removedirs|makedirs)\("
+    r"|shutil\.(copy|copy2|copyfile|copytree|move|rmtree)\("
+    r"|\.unlink\(|\.rename\(|\.mkdir\(|\.truncate\("
+    r"|\bunlink\(|\brename\("                      # perl builtins
+    r"|FileUtils\.|File\.(delete|write|rename|unlink|open\([^)]*['\"][wa])|IO\.write")
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+LIST_OPERATORS = {";", "&&", "||", "|", "&", "|&"}
+REDIRECT_TOKENS = {">", ">>", "&>", "&>>"}
 
 
 def _tokens(command: str) -> list:
@@ -57,7 +81,7 @@ def _segments(tokens: list) -> list:
     """The simple commands of a pipeline or list, each a token list."""
     out, current = [], []
     for token in tokens:
-        if token in {";", "&&", "||", "|", "&", "|&"}:
+        if token in LIST_OPERATORS:
             if current:
                 out.append(current)
             current = []
@@ -75,25 +99,36 @@ def _unquote(token: str) -> str:
 
 
 def _words(segment: list) -> list:
-    """The command and its arguments, after leading assignments and wrappers."""
+    """The command and its arguments, after leading assignments and wrappers.
+
+    `sudo -u bob rm x`, `env FOO=1 rm -rf x`, `xargs -I{} rm {}` and `timeout 5 touch a` all
+    resolve to the wrapped command.
+    """
     words = list(segment)
-    while words and ASSIGNMENT.match(words[0]):
-        words.pop(0)
-    while words and os.path.basename(_unquote(words[0])) in WRAPPERS:
-        words.pop(0)
-        while words and words[0].startswith("-"):
+    while True:
+        while words and ASSIGNMENT.match(words[0]):
             words.pop(0)
-    return words
+        if not words or os.path.basename(_unquote(words[0])) not in WRAPPERS:
+            return words
+        wrapper = os.path.basename(_unquote(words.pop(0)))
+        while words and words[0].startswith("-"):
+            flag = words.pop(0)
+            if flag in WRAPPER_VALUE_FLAGS and words and not words[0].startswith("-"):
+                words.pop(0)
+        for _ in range(WRAPPER_POSITIONALS.get(wrapper, 0)):
+            if words:
+                words.pop(0)
 
 
 def _redirect_target(segment: list) -> Optional[str]:
+    """The file a redirection writes, or None (fd duplication and /dev/null do not count)."""
     for i, token in enumerate(segment):
-        if token in {">", ">>", "&>", "&>>"} or (token.endswith(">") and token[:-1].isdigit()):
-            target = segment[i + 1] if i + 1 < len(segment) else None
-            if target and not target.startswith("&") and _unquote(target) != "/dev/null":
-                return _unquote(target)
-        elif FD_DUP.match(token):
+        is_redirect = token in REDIRECT_TOKENS or (token.endswith(">") and token[:-1].isdigit())
+        if not is_redirect or i + 1 >= len(segment):
             continue
+        target = _unquote(segment[i + 1])
+        if not target.startswith("&") and target != "/dev/null":
+            return target
     return None
 
 
@@ -104,26 +139,55 @@ def _git_label(words: list) -> Optional[str]:
         rest = rest[2:] if takes_value and len(rest) > 1 else rest[1:]
     if not rest:
         return None
-    sub, flags = _unquote(rest[0]), [_unquote(r) for r in rest[1:]]
+    sub, args = _unquote(rest[0]), [_unquote(r) for r in rest[1:]]
     if sub in GIT_WRITES:
         return f"git {sub}"
     if sub == "branch":                       # a write only with a delete or move flag
-        return "git branch -d" if any(f in GIT_BRANCH_WRITE_FLAGS for f in flags) else None
-    if sub in GIT_READ_FLAGS:                 # stash, tag, worktree: writes unless listing
-        return None if any(f in GIT_READ_FLAGS[sub] for f in flags) else f"git {sub}"
+        return "git branch -d" if any(a in GIT_BRANCH_WRITE_FLAGS for a in args) else None
+    if sub == "stash":                        # a write unless listing or showing
+        return None if args and args[0] in GIT_STASH_READS else "git stash"
+    if sub == "tag":                          # bare `git tag` lists; a name creates
+        return None if not args or any(a in GIT_TAG_READ_FLAGS for a in args) else "git tag"
+    if sub == "worktree":
+        return "git worktree" if args and args[0] in GIT_WORKTREE_WRITES else None
     return None
 
 
-def _inline_program_writes(words: list, command: str) -> bool:
-    if not INTERPRETERS.match(os.path.basename(_unquote(words[0]))):
+def _manager_label(base: str, args: list) -> Optional[str]:
+    """Package managers adding or removing dependencies. Labels are fixed vocabulary."""
+    if base in NODE_MANAGERS:
+        sub = args[0] if args else ("install" if base == "yarn" else "")
+        return f"{base} {sub}" if sub in NODE_WRITES else None
+    if base == "uv" and args[:1] == ["pip"]:
+        return "uv pip install" if len(args) > 1 and args[1] in UV_PIP_WRITES else None
+    if base in OTHER_MANAGERS and args and args[0] in OTHER_MANAGERS[base]:
+        return f"{base} {args[0]}"
+    return None
+
+
+def _download_label(base: str, args: list) -> Optional[str]:
+    if base == "curl":
+        to_file = any(a in {"-o", "-O", "--output", "--remote-name"} or (a.startswith("-o") and len(a) > 2)
+                      for a in args)
+        return "a download to a file" if to_file else None
+    if base == "wget":
+        to_stdout = any(a in {"-O-", "-qO-"} for a in args)
+        for i, a in enumerate(args):
+            if a in {"-O", "--output-document"} and args[i + 1:i + 2] == ["-"]:
+                to_stdout = True
+        return None if to_stdout else "a download to a file"
+    return None
+
+
+def _inline_program_writes(base: str, args: list, command: str) -> bool:
+    if not INTERPRETERS.match(base):
         return False
-    inline = any(_unquote(w) in INLINE_FLAGS for w in words[1:]) or "<<" in command
+    inline = any(a in INLINE_FLAGS for a in args) or "<<" in command
     return bool(inline and WRITE_PATTERNS.search(command))
 
 
 def classify_segment(segment: list, command: str) -> Optional[str]:
-    target = _redirect_target(segment)
-    if target is not None:
+    if _redirect_target(segment) is not None:
         return "a redirect to a file"
     words = _words(segment)
     if not words:
@@ -131,51 +195,40 @@ def classify_segment(segment: list, command: str) -> Optional[str]:
     base = os.path.basename(_unquote(words[0]))
     args = [_unquote(w) for w in words[1:]]
     if base in {"bash", "sh", "zsh"} and "-c" in args:
-        inner = args[args.index("-c") + 1] if args.index("-c") + 1 < len(args) else ""
-        return classify_command(inner)
+        inner = args[args.index("-c") + 1:][:1]
+        return classify_command(inner[0]) if inner else None
     if base in FILE_COMMANDS:
         return base
-    if base == "sed" and any(a in {"-i", "--in-place"} or a.startswith("-i") and a[1:2] == "i" or a.startswith("--in-place=") for a in args):
+    if base == "sed" and any(SED_IN_PLACE.match(a) for a in args):
         return "sed -i"
-    if base in {"perl", "ruby"} and any(re.match(r"^-[a-zA-Z]*i", a) for a in args):
+    if base in {"perl", "ruby"} and any(PERL_RUBY_IN_PLACE.match(a) for a in args):
         return f"{base} -i"
     if base == "git":
         return _git_label(words)
-    if base in NODE_MANAGERS:
-        sub = args[0] if args else ("install" if base == "yarn" else "")
-        if sub in NODE_WRITES:
-            return f"{base} {sub}"
-    if base in OTHER_MANAGERS and args and args[0] in OTHER_MANAGERS[base]:
-        return f"{base} {' '.join(args[:2]) if base == 'uv' and args[0] == 'pip' else args[0]}"
+    label = _manager_label(base, args) or _download_label(base, args)
+    if label:
+        return label
     if "--write" in args:
         return "a --write flag"
     if "--fix" in args:
         return "a --fix flag"
-    if "-w" in args and any(a in {"prettier", "biome"} for a in [base] + args):
+    if "-w" in args and any(a in FORMATTERS for a in [base] + args):
         return "a --write flag"
-    if base == "curl" and any(a in {"-o", "-O", "--output", "--remote-name"} or a.startswith("-o") and len(a) > 2 for a in args):
-        return "a download to a file"
-    if base == "wget" and not any(a in {"-O-", "-qO-"} or (a in {"-O", "--output-document"} and args[args.index(a) + 1:args.index(a) + 2] == ["-"]) for a in args):
-        return "a download to a file"
     if base == "find":
         if "-delete" in args:
             return "find -delete"
-        if "-exec" in args or "-execdir" in args:
-            flag = "-exec" if "-exec" in args else "-execdir"
-            after = args[args.index(flag) + 1:]
-            if after and os.path.basename(after[0]) in FILE_COMMANDS:
-                return f"find -exec {os.path.basename(after[0])}"
-    if _inline_program_writes(words, command):
+        for flag in ("-exec", "-execdir"):
+            if flag in args:
+                after = args[args.index(flag) + 1:]
+                if after and os.path.basename(after[0]) in FILE_COMMANDS:
+                    return f"find -exec {os.path.basename(after[0])}"
+    if _inline_program_writes(base, args, command):
         return "an inline program that writes"
     return None
 
 
 def classify_command(command: str) -> Optional[str]:
-    """The label for what a shell command changes, or None when it looks read-only.
-
-    A best-effort mesh: the common ways of changing files from a shell. It never proves a
-    command has no side effects, and the label is what a refusal names.
-    """
+    """The label for what a shell command changes, or None when it looks read-only."""
     if not command or not command.strip():
         return None
     for segment in _segments(_tokens(command)):
@@ -189,7 +242,8 @@ def classify_command(command: str) -> Optional[str]:
 
 PLUGIN_PREFIX = "matt-pocock-workflow:"
 # Matt Pocock's process skills, by bare name. Domain skills (frontend-design, pdf, ...) and
-# other plugins' process skills (superpowers:brainstorming) do not open the gate.
+# other plugins' process skills (superpowers:brainstorming) do not open the gate. The three
+# setup skills are the ones upstream ships; a wildcard would admit any third-party setup-*.
 PROCESS_SKILLS = {
     "grilling", "grill-me", "grill-with-docs", "domain-modeling", "tdd", "diagnosing-bugs",
     "code-review", "codebase-design", "prototype", "resolving-merge-conflicts", "research",
@@ -197,10 +251,18 @@ PROCESS_SKILLS = {
     "wayfinder", "triage", "improve-codebase-architecture", "handoff", "ask-matt",
     "implement", "to-spec", "to-tickets",
 }
-GO_WORDS = {"y", "yes", "yep", "yeah", "yup", "ok", "okay", "k", "sure", "go", "continue",
-            "proceed", "next", "approved", "approve", "confirmed", "confirm", "agreed", "lgtm",
-            "fine", "correct", "right", "carry", "keep", "do", "sounds", "looks", "option",
-            "please"}
+# A continuation is a whole go-ahead phrase, optionally led by an assent word and trailed by
+# a courtesy, or a bare option. Anything with its own content is a new request.
+GO_PHRASES = {
+    "y", "yes", "yep", "yeah", "yup", "ok", "okay", "k", "sure", "go", "go ahead", "go on",
+    "go for it", "continue", "proceed", "do it", "do that", "do so", "next", "approved",
+    "approve", "confirmed", "confirm", "agreed", "lgtm", "fine", "correct", "right",
+    "thats right", "that is right", "carry on", "keep going", "sounds good", "looks good",
+    "ship it", "make it so", "as recommended", "recommended", "your recommendation",
+    "go with your recommendation", "the first option", "first option",
+}
+ASSENT_LEADS = {"y", "yes", "yep", "yeah", "yup", "ok", "okay", "sure", "great", "good", "perfect"}
+COURTESIES = {"please", "pls", "thanks", "thank you", "ty"}
 OPTION = re.compile(r"^(option\s+)?[a-d1-9]$")
 
 
@@ -218,27 +280,34 @@ def slash_declaration(prompt: str) -> Optional[str]:
     text = (prompt or "").strip()
     if not text.startswith("/"):
         return None
-    name = text[1:].split()[0] if text[1:].split() else ""
+    parts = text[1:].split()
+    name = parts[0] if parts else ""
     return name if is_declaration(name) else None
 
 
 def is_continuation(prompt: str) -> bool:
     """A short go-ahead ("yes", "ok, do that", "option 2") that keeps the current request."""
-    text = re.sub(r"[^\w\s-]", " ", (prompt or "").lower()).strip()
+    text = re.sub(r"[^\w\s-]", " ", (prompt or "").lower())
+    text = re.sub(r"\s+", " ", text).strip()
     if not text or len(text) > 40:
         return False
+    if OPTION.match(text):
+        return True
     words = text.split()
-    if len(words) > 5:
-        return False
-    return OPTION.match(text) is not None or words[0] in GO_WORDS
+    while len(words) > 1 and words[0] in ASSENT_LEADS:
+        words = words[1:]
+    for courtesy in sorted(COURTESIES, key=len, reverse=True):
+        tail = courtesy.split()
+        if len(words) > len(tail) and words[-len(tail):] == tail:
+            words = words[:-len(tail)]
+            break
+    phrase = " ".join(words)
+    return phrase in GO_PHRASES or phrase in COURTESIES or OPTION.match(phrase) is not None
 
 
 # --- The ledger ---------------------------------------------------------------------------
 # One JSON file per session: the current request's declarations, changes and last
 # verification. Skill names, tool names and paths only; never command or prompt text.
-
-import json
-import time
 
 LEDGER_VERSION = 1
 
@@ -392,8 +461,8 @@ ROUTES = ("Route it first, with the Skill tool: `diagnosing-bugs` for something 
 
 def deny_reason(change: dict) -> str:
     what = f"`{change['label']}`" if change["tool"] == "Bash" else f"editing `{change['path']}`"
-    return (f"Seams gate: {what} changes the project, and no workflow skill has been declared "
-            f"for this request. {ROUTES}")
+    return (f"Seams gate: {what} changes the project, and this request has no declaration yet: "
+            f"no process skill has been invoked for it. {ROUTES}")
 
 
 def decide_pre_tool_use(event: dict, ledger: dict, config_dir: Optional[str] = None) -> dict:
@@ -404,3 +473,23 @@ def decide_pre_tool_use(event: dict, ledger: dict, config_dir: Optional[str] = N
     if not ledger.get("declarations"):
         return {"decision": "deny", "reason": deny_reason(change), "change": None}
     return {"decision": "allow", "reason": None, "change": change}
+
+
+# --- The hook frame -----------------------------------------------------------------------
+
+
+def run_hook(handler: Callable[[dict], Optional[dict]]) -> int:
+    """Run a hook: the event from stdin, the handler's output (if any) to stdout as JSON.
+
+    Any error, including unreadable input, prints nothing to stdout and writes the traceback
+    to stderr for the debug log; the exit code is 0 either way, so a hook bug never blocks
+    the user's work (fail open).
+    """
+    try:
+        event = json.loads(sys.stdin.read() or "{}")
+        output = handler(event)
+        if output is not None:
+            print(json.dumps(output))
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+    return 0
