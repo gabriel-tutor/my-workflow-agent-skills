@@ -93,11 +93,14 @@ The same flow, as a table:
 
 | Request | Path |
 | --- | --- |
-| Trivial: copy, typo, config, rename | edit, then verify |
+| Trivial: copy, a typo, a comment, an unobservable rename | the `trivial` declaration, then edit and verify |
+| Sensitive at any size: auth, permissions, secrets, billing, migrations, infrastructure, CI or deploy config, a public API, anything destructive | `grill` on the security and failure axes, then `tdd`; `code-review` required |
+| Down or degraded for users now | `incident`: contain and restore before diagnosis |
 | Broken, failing, throwing, slow | `diagnosing-bugs`, then verify and finish |
 | Bounded change to existing code | short `grill`, then `tdd`, then verify and finish |
 | New behavior that fits one session | `grill` + `domain-modeling`, then `implement`, then verify and finish |
-| A build spanning several sessions | grill, then `to-spec`, `to-tickets`, and `implement` one ticket per session |
+| A build spanning several sessions, or a new app | grill, then `to-spec`, `to-tickets`, and `implement` one ticket per session; a new app starts with the walking skeleton |
+| Ship, deploy, release, publish | `release`: readiness, a deploy behind an explicit yes, verification, an operations handover |
 | Foggy effort, issues someone else wrote, upkeep | Claude suggests `/wayfinder`, `/triage`, `/improve-codebase-architecture` |
 
 Matt Pocock's skills own design, planning, tests, bugs, review and execution. Four Superpowers skills cover what they don't: `using-git-worktrees`, `verification-before-completion` (verify), `finishing-a-development-branch` (finish) and `receiving-code-review`. They ship inside this plugin as unmodified, MIT-attributed copies (`plugin/THIRD_PARTY_NOTICES.md`), so the Superpowers plugin itself is optional. Disable it for a single bootstrap per session, or keep it: Matt Pocock's skills still win every overlap (tested, see below).

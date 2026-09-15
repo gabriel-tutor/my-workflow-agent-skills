@@ -155,6 +155,28 @@ grep -qF "If Superpowers is also enabled" "$PLUGIN/skills/using-matt-pocock-skil
 grep -qF "Superpowers overlaps" "$PLUGIN/skills/using-matt-pocock-skills/SKILL.md" \
   || fail "the bootstrap should point at routing.md for the Superpowers overlaps"
 
+# The bootstrap (ticket 07): every Seams skill directory is named in the bootstrap or in routing.md;
+# the table routes by risk as well as size (trivial, sensitive at any size, an incident, a new app's
+# walking skeleton, a release); one sentence states the gate and the done-check; a yes covering
+# later steps is not asked again while deploy and publish always ask; the two anchor red flags stay.
+BOOT="$PLUGIN/skills/using-matt-pocock-skills/SKILL.md"
+NAMED="$(cat "$BOOT" "$ROUTING")"
+for d in "$PLUGIN"/skills/*/; do
+  s=$(basename "$d"); [[ $s == using-matt-pocock-skills ]] && continue
+  [[ $NAMED == *"\`$s\`"* || $NAMED == *"matt-pocock-workflow:$s"* ]] || fail "Seams skill named neither in the bootstrap nor in routing.md: $s"
+done
+must_say bootstrap "$BOOT" "| Trivial" "\`trivial\`*" "| Sensitive" "any size" "anything destructive" "\`grill\`* (security and failure axes)" \
+  "\`code-review\` required" "\`incident\`*" "\`release\`*" "walking skeleton" "A hook refuses" "\`verification-before-completion\`*" \
+  "a yes covering later steps is not asked again" "deploy and publish always ask" "\"it's a quick fix\"" "\"the requirements are clear\""
+grep -qF "config, rename" "$BOOT" && fail "the trivial row still lists config and rename without a qualifier"
+# routing.md carries what moved out of the bootstrap and the rules the spec added: the worktree and
+# review-feedback owners, the judgment rule at a phase boundary (no token figure), the named durable
+# state, evidence reuse for an unchanged candidate, the greenfield path.
+must_say routing.md "$ROUTING" "\`using-git-worktrees\`" "\`receiving-code-review\`" "Durable state" "\`CONTEXT.md\`" "ADRs" \
+  "resumed" "unchanged candidate" "Greenfield" "walking skeleton" "\`/ask-matt\`"
+grep -q "150k" "$ROUTING" && fail "routing.md still carries the 150k-token figure"
+grep -qE "[0-9]+k tokens" "$BOOT" && fail "the bootstrap carries a token figure"
+
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
 for s in $KEPT; do [[ -f "$PLUGIN/skills/$s/SKILL.md" ]] || fail "missing copied skill: $s"; done

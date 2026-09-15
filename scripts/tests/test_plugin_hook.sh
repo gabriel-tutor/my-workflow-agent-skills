@@ -29,7 +29,8 @@ REQUIRED=(grilling domain-modeling tdd diagnosing-bugs code-review codebase-desi
 skills() { local dir="$1"; shift; local names=("$@"); [[ $# -eq 0 ]] && names=("${REQUIRED[@]}")
            local n; for n in "${names[@]}"; do mkdir -p "$dir/$n"; : > "$dir/$n/SKILL.md"; done; }
 MP_HOME="$TMP/home-mp"; skills "$MP_HOME/.claude/skills"
-PARTIAL_HOME="$TMP/home-partial"; skills "$PARTIAL_HOME/.claude/skills" grilling    # the 2.x sentinel, alone
+PARTIAL_HOME="$TMP/home-partial"                      # a realistic partial: two skills he added since the install
+skills "$PARTIAL_HOME/.claude/skills" grilling domain-modeling tdd diagnosing-bugs code-review setup-matt-pocock-skills setup-pre-commit
 BARE_HOME="$TMP/home-bare"; mkdir -p "$BARE_HOME/.claude/skills"
 CUSTOM_CONFIG="$TMP/custom config dir"; skills "$CUSTOM_CONFIG/skills"                # CLAUDE_CONFIG_DIR, with spaces
 # skills.sh installs each skill as a symlink into its own store; some people link the whole directory.
@@ -87,10 +88,10 @@ C=$(context "$FIX" "$BARE_HOME" "$PLAIN" "$CUSTOM_CONFIG")
 # A partial install is reported as what it is: the missing names and the install command,
 # never "installed" on the strength of one sentinel file, and never a present name as missing.
 C=$(context "$FIX" "$PARTIAL_HOME" "$PLAIN")
-[[ "$C" == *"missing"* && "$C" == *"tdd"* && "$C" == *"setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills"* ]] \
+[[ "$C" == *"missing codebase-design, setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills"* ]] \
   || fail "partial install not reported with the missing names and the install command: $C"
 [[ "$C" != *"skill files"* ]] || fail "partial install reported as installed: $C"
-[[ "$(grep missing <<< "$C")" != *grilling* ]] || fail "a present skill listed as missing: $C"
+[[ "$(grep missing <<< "$C")" != *grilling* && "$(grep missing <<< "$C")" != *tdd* ]] || fail "a present skill listed as missing: $C"
 
 # Symlinked skill directories, and a symlinked skills directory, count as installed.
 for H in "$LINK_HOME" "$DIRLINK_HOME"; do
@@ -135,13 +136,19 @@ if [[ ! -r "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md" ]]; then   # r
 fi
 chmod 644 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"   # so the trap can remove it
 
-# Guard: the real bootstrap stays within the 3,000-byte budget with both dynamic lines, in
-# every MP-line variant: installed, partial (eight names, the longest), not installed, symlinked,
-# and a custom config directory.
+# Guard: the real bootstrap, injected from a cache-length plugin path (120 characters) with both
+# dynamic lines, stays at or under 2,900 bytes: the 3,000-byte budget less 100 bytes of headroom.
+# Every MP-line variant: installed, a realistic partial (two names missing), not installed,
+# symlinked, and a custom config directory.
+ROOT120="/$(printf '%0119d' 0 | tr 0 a)"; [[ ${#ROOT120} -eq 120 ]] || fail "ROOT120 is ${#ROOT120} characters"
 budget() {   # budget <home> [config-dir]
-  local C N; C=$(context "$REPO/plugin" "$1" "$REPO_UNSET" ${2:+"$2"})
+  local C N event="{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$REPO_UNSET\"}"
+  C=$(env HOME="$1" CLAUDE_PLUGIN_ROOT="$ROOT120" ${2:+CLAUDE_CONFIG_DIR="$2"} "$HOOK" <<< "$event" \
+      | python3 -c 'import json, sys; print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])') \
+    || fail "hook failed while measuring the budget (HOME=$1)"
+  [[ "$C" == *"$ROOT120/skills/using-matt-pocock-skills/references/routing.md"* ]] || fail "the 120-character root was not injected: $C"
   N=$(printf '%s' "$C" | wc -c | tr -d ' ')
-  (( N <= 3000 )) || fail "injection is $N bytes, over the 3,000-byte budget (HOME=$1${2:+ CLAUDE_CONFIG_DIR=$2})"
+  (( N <= 2900 )) || fail "injection is $N bytes from a 120-character plugin path, over 2,900 (3,000 less 100 headroom) (HOME=$1${2:+ CLAUDE_CONFIG_DIR=$2})"
   echo "  $N bytes: HOME=$(basename "$1")${2:+ CLAUDE_CONFIG_DIR=$(basename "$2")}"
 }
 for H in "$MP_HOME" "$PARTIAL_HOME" "$BARE_HOME" "$LINK_HOME" "$DIRLINK_HOME"; do budget "$H"; done
