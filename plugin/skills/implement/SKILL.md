@@ -5,21 +5,63 @@ description: Use when an agreed design, spec or ticket is ready to build
 
 # Implement
 
-This skill runs Matt Pocock's `implement`, which only the user can invoke directly.
+Build the work a spec, a ticket or an agreed design describes: tests first at the agreed seams, a commit, a review of that commit, the definition of done with evidence, and a handover. The steps run in this order; the review sees only what is committed, which is why the commit comes before it.
 
-1. **Gate.** Before reading anything, confirm which spec, ticket or agreed design you're building, and where. Offer a worktree through `matt-pocock-workflow:using-git-worktrees`, which asks for consent, or the current branch. Wait for a yes. Skip this only when the user's last message already names both.
-2. **Load it.** Read Matt Pocock's `implement/SKILL.md` from the directory the session bootstrap names. If the bootstrap says his skills were not found, or the file is missing, tell the user Matt Pocock's skills aren't installed, and stop.
-3. **Follow it exactly,** with one addition. When it runs `code-review`, pass the merge-base of this branch and its base branch (`git merge-base <base> HEAD`) as the fixed point. `code-review` reads `docs/agents/issue-tracker.md`; if the repo has none, offer `matt-pocock-workflow:foundations` before the review.
-4. **Definition of done.** Before claiming the work is done, run `matt-pocock-workflow:verification-before-completion` and confirm each of these, with the command output as evidence:
-   - The tests at the agreed seams pass, and the full suite passes.
-   - Typecheck passes, and lint passes if the repo has one.
-   - Every acceptance criterion on the ticket or spec is met, checked one by one.
-   - No debug leftovers: tagged logs, commented-out code, throwaway scripts, `.only` on a test.
-   - Docs are updated where behavior changed: the README's run or usage lines, the glossary if a term moved.
-   - The commit message says what changed and why, and names the ticket.
-   Anything unmet is not done: fix it, or say plainly that it's unmet and why.
-5. **Handover.** Your closing message is the handover. It has exactly four sections under these four headings, in this order, and it is not finished until the fourth is written:
-   1. **Run it.** The exact commands to start and to check the work, taken from the repo's real scripts or README. If the repo has no run or verify command, give the one-line command that works and offer to add it to the README.
-   2. **Try it.** One short walkthrough per acceptance criterion, in the user's words: what to do, and what they should see. Refer to things by their glossary names.
-   3. **What changed.** The files and public interfaces touched, in a few lines, and any decision you made that the ticket didn't settle.
-   4. **Next.** Name the next unblocked ticket, or say there is none. Then say one of two things: `/clear` before it, because it is unrelated to this one or this session is already heavy; or continue in this session, because it builds on this one. If the work is on a branch, also offer `matt-pocock-workflow:finishing-a-development-branch`. A handover that stops at "What changed" is incomplete.
+## Gate
+
+Before reading anything, confirm which spec, ticket or agreed design you're building, and where. Offer a worktree through `matt-pocock-workflow:using-git-worktrees`, which asks for consent, or the current branch. Wait for a yes. Skip this only when the user's last message already names both.
+
+Then note the starting point for the review's fixed point: the current branch, its base branch, and `git rev-parse HEAD`.
+
+## Build
+
+1. **Read the work.** Fetch the ticket and the spec it came from through the issue-tracker workflow (`docs/agents/issue-tracker.md`), then `CONTEXT.md` and any ADR in the area you're touching. Work in the glossary's vocabulary.
+2. **Test first.** Invoke `tdd` (Matt Pocock's, bare name) with the Skill tool and follow it one slice at a time at the agreed seams: the spec's Testing Decisions, the ticket, or what the grill settled. Seams settled there are not asked again; only when none was ever agreed, ask once with AskUserQuestion before the first test. If `tdd` isn't available, tell the user Matt Pocock's skills aren't installed, and stop.
+3. **Check as you go.** Run the typecheck and the single test file you're working in regularly, and the full suite once at the end. Use the repo's real scripts.
+
+## Commit
+
+1. Stage the ticket's files **by name**: `git add <path> [<path>...]`. Never `git add -A`, `git add .` or `git commit -a`.
+2. Anything else that `git status --short` shows dirty or untracked is **excluded**: list those paths in your reply as excluded, and leave them alone. They are never staged, stashed or committed here.
+3. Commit to the branch the gate settled, with a message that says what changed and why, and names the ticket. If a pre-commit hook rewrites a staged file, re-stage that file by name and commit again; never `--no-verify`.
+4. HEAD is now the **candidate**: note `git rev-parse --short HEAD`.
+
+## Review
+
+1. **Fixed point.** On a branch, the merge-base with its base branch: `git merge-base <base> HEAD`. On the base branch itself, the commit HEAD was at when the gate closed (`git merge-base` would return HEAD). The candidate is HEAD; do not change it while the review runs.
+2. **Empty diff.** Run `git diff --stat <fixed-point>...HEAD` first. If it prints nothing, there is nothing to review: report that, say why (nothing committed yet, or the fixed point is HEAD), and fix that before going on. Never run the review on an empty diff.
+3. `code-review` reads `docs/agents/issue-tracker.md`; if the repo has none, offer `matt-pocock-workflow:foundations` before the review.
+4. Invoke `code-review` (Matt Pocock's, bare name) with the Skill tool, passing the fixed point. It diffs `<fixed-point>...HEAD` and reviews along its two axes, Standards and Spec.
+
+## Review fixes
+
+1. Judge each finding through `matt-pocock-workflow:receiving-code-review`: verify it against the code before acting, and say which findings you are not acting on and why.
+2. For the findings you act on: fix, then commit the fix by the same rules as above (by name, exclusions listed), and re-run the checks the fix affects: the test file at that seam for a change in one place, the full suite and the typecheck when more than one file changed.
+3. The new HEAD is the candidate. Note its SHA; everything below refers to it.
+
+## Definition of done
+
+Before claiming the work is done, run `matt-pocock-workflow:verification-before-completion` and confirm each item below, with the command output as evidence. Present the result as a table: the first row names the candidate SHA the evidence was gathered on, then one row per item with the command run and the line of its output that proves it.
+
+| Item | What counts |
+| --- | --- |
+| Candidate | `git rev-parse --short HEAD`, after the last fix commit |
+| Tests | the tests at the agreed seams pass, and the full suite passes |
+| Typecheck and lint | typecheck passes; lint passes if the repo has one |
+| Acceptance criteria | every criterion on the ticket or spec is met, checked one by one |
+| No debug leftovers | no tagged logs, commented-out code, throwaway scripts, or `.only` on a test |
+| Docs | updated where behavior changed: the README's run or usage lines, the glossary if a term moved |
+| Commit message | says what changed and why, and names the ticket |
+
+Anything unmet is not done: fix it, or say plainly that it's unmet and why. Then record the outcome on the ticket through the tracker workflow: criteria ticked, status done, a note naming the candidate SHA. With a local-markdown tracker that is an edit to the ticket file, committed by name.
+
+## Handover
+
+Your closing message is the handover. It has exactly four sections under these four headings, in this order, and it is not finished until the fourth is written:
+
+1. **Run it.** The exact commands to start and to check the work, taken from the repo's real scripts or README. If the repo has no run or verify command, give the one-line command that works and offer to add it to the README.
+2. **Try it.** One short walkthrough per acceptance criterion, in the user's words: what to do, and what they should see. Refer to things by their glossary names.
+3. **What changed.** The candidate SHA, the files and public interfaces touched, in a few lines, and any decision you made that the ticket didn't settle.
+4. **Next.** Name the next unblocked ticket, or say there is none. Then say one of two things: `/clear` before it, because it is unrelated to this one or this session is already heavy; or continue in this session, because it builds on this one. If the work is on a branch, also offer `matt-pocock-workflow:finishing-a-development-branch`. A handover that stops at "What changed" is incomplete.
+
+Adapted from Matt Pocock's `implement` skill (github.com/mattpocock/skills, `skills/engineering/implement` at commit `3cca18b368ae95cdbdebbff572ccafa662551015`), MIT License, Copyright (c) 2026 Matt Pocock; the full notice is in this plugin's `THIRD_PARTY_NOTICES.md`.

@@ -124,9 +124,9 @@ curl -fsSL https://raw.githubusercontent.com/gabriel-tutor/seams/main/scripts/in
 Read it first if you like: [`scripts/install.sh`](scripts/install.sh). It is safe to re-run, and it does five things, skipping any that are already done:
 
 1. Checks for the `claude` CLI, Node and Python 3.
-2. Installs [Matt Pocock's skills](https://github.com/mattpocock/skills) into `~/.claude/skills` with skills.sh (`npx skills add mattpocock/skills`), unless they are there already. The plugin contains none of his skills; it invokes the installed ones by name.
+2. Installs [Matt Pocock's skills](https://github.com/mattpocock/skills) into `~/.claude/skills` with skills.sh (`npx skills add mattpocock/skills`), unless they are there already. The plugin invokes his installed skills by name; its own `to-spec`, `to-tickets` and `implement` are adaptations of his three (MIT, attributed with the upstream commit and file hashes in `plugin/THIRD_PARTY_NOTICES.md`), so nothing reads his user-only files at runtime.
 3. Adds this repo as a plugin marketplace from GitHub and installs `matt-pocock-workflow` from it.
-4. Adds the Read permission rules the plugin needs to `~/.claude/settings.json`, after backing it up to `settings.json.pre-mpw-install`. The `to-spec`, `to-tickets` and `implement` steps read Matt Pocock's own `SKILL.md`, and the bootstrap points at a reference file inside the plugin; without these rules Claude asks for permission each time.
+4. Adds the Read permission rules the plugin needs to `~/.claude/settings.json`, after backing it up to `settings.json.pre-mpw-install`. The bootstrap points at a reference file inside the plugin; without that rule Claude asks for permission each time. The rule for `~/.claude/skills` is no longer needed: nothing reads Matt Pocock's files at runtime.
 5. Leaves Superpowers alone. Set `MPW_DISABLE_SUPERPOWERS=1` to disable it for a single bootstrap per session; either way, Matt Pocock's skills win every overlap (tested below).
 
 Then restart Claude Code. Every new session opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are, and a nudge toward `foundations` when the repo has no `docs/agents/issue-tracker.md` yet.
