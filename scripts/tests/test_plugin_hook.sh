@@ -47,8 +47,7 @@ REPO_SET="$TMP/repo-set"; mkdir -p "$REPO_SET/docs/agents"; git -C "$REPO_SET" i
 # prints nothing. The fourth argument, when given, is the session's CLAUDE_CONFIG_DIR.
 context() {
   local out event="{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$3\"}"
-  if [[ $# -ge 4 ]]; then out=$(HOME="$2" CLAUDE_CONFIG_DIR="$4" "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"
-  else out=$(HOME="$2" "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"; fi
+  out=$(env HOME="$2" ${4:+CLAUDE_CONFIG_DIR="$4"} "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"
   [[ -z "$out" ]] && return 0
   python3 -c '
 import json, sys
@@ -80,7 +79,7 @@ C=$(CLAUDE_PLUGIN_ROOT="$ROOT_OVERRIDE" HOME="$MP_HOME" "$FIX/hooks/session-star
 # The MP line names the installed skills directory when every required skill is there, and
 # looks where Claude Code does: CLAUDE_CONFIG_DIR when set (spaces and all), else ~/.claude.
 C=$(context "$FIX" "$MP_HOME" "$PLAIN")
-[[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not installed"* ]] || fail "MP location line wrong for an MP home: $C"
+[[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not installed"* && "$C" != *"missing"* ]] || fail "MP location line wrong for an MP home: $C"
 C=$(context "$FIX" "$BARE_HOME" "$PLAIN" "$CUSTOM_CONFIG")
 [[ "$C" == *"$CUSTOM_CONFIG/skills"* && "$C" != *"not installed"* && "$C" != *"missing"* ]] \
   || fail "CLAUDE_CONFIG_DIR not honoured for the skills directory: $C"
@@ -145,7 +144,7 @@ budget() {   # budget <home> [config-dir]
   (( N <= 3000 )) || fail "injection is $N bytes, over the 3,000-byte budget (HOME=$1${2:+ CLAUDE_CONFIG_DIR=$2})"
   echo "  $N bytes: HOME=$(basename "$1")${2:+ CLAUDE_CONFIG_DIR=$(basename "$2")}"
 }
-for H in "$MP_HOME" "$PARTIAL_HOME" "$BARE_HOME" "$LINK_HOME"; do budget "$H"; done
+for H in "$MP_HOME" "$PARTIAL_HOME" "$BARE_HOME" "$LINK_HOME" "$DIRLINK_HOME"; do budget "$H"; done
 budget "$BARE_HOME" "$CUSTOM_CONFIG"
 
 # The bootstrap injects even when the gate module is missing beside the hook (the ledger is

@@ -13,3 +13,7 @@
 - [ ] The routing scenarios still route as expected in one headless run each (the full rerun belongs to ticket 10).
 
 **How to verify:** `scripts/test.sh`; `wc -c` on the injected context from `echo '{"cwd":"'$PWD'"}' | CLAUDE_PLUGIN_ROOT=/a/b/... plugin/hooks/session-start` shows ≤ 2,900.
+
+## Comments
+
+Landed early, in ticket 03 (`fd311a1`): the Superpowers-overlap sentence moved from the bootstrap to `routing.md` (section "Alongside Superpowers", with one added sentence: the gate enforces the precedence because a Superpowers skill is not a declaration); rule 5 points at `routing.md` for the overlaps; the static test fails if the sentence returns to the bootstrap. The worktree and review-feedback owners are still in the bootstrap. Budget numbers to plan the trim: on a real home the injection is 2,619 bytes installed at this machine's 93-character cache path; partial install plus the setup nudge is 2,962 at 93 characters and 2,996 at 127. The hook suite's partial fixture (grilling alone, eight names, on an ~88-character temp path) measures 2,977 at the repo path and about 3,050 at a 120-character path, so ≤ 2,900 there needs roughly 150 bytes off the body, or a realistic partial fixture (two missing names), or a cap on the names listed.

@@ -13,3 +13,7 @@
 - [ ] The local install reports 3.0.0 after `claude plugin update`, and a new session shows the 3.0 bootstrap.
 
 **How to verify:** `scripts/test.sh`; `python3 scripts/behavior_test.py run --all --arm plugin --assert` exits 0; `gh run list --limit 2` shows green for both jobs; `claude plugin list` shows `matt-pocock-workflow@my-workflow-agent-skills 3.0.0`.
+
+## Comments
+
+From ticket 03: README's evidence section says "the plugin's guard line gives Matt Pocock's skills every overlap" about the 2.x runs; since ticket 03 that sentence lives in `routing.md` and the gate (ticket 01) enforces the precedence. The rewrite should describe the 3.0 mechanism and cite the 3.0 runs.

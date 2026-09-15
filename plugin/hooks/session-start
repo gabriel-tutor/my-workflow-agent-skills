@@ -36,12 +36,13 @@ PLUGIN = Path(os.environ.get("CLAUDE_PLUGIN_ROOT") or HERE)
 BOOTSTRAP = HERE / "skills" / "using-matt-pocock-skills" / "SKILL.md"
 
 PREAMBLE = "Your `matt-pocock-workflow:using-matt-pocock-skills` skill, this session's routing policy:"
-# The Matt Pocock skills the bootstrap and the Seams skills invoke by name. The optional ones
-# routing.md mentions (prototype, research, wizard, resolving-merge-conflicts) are not checked.
+# The Matt Pocock skills the bootstrap and the Seams skills invoke with the Skill tool. The
+# rest of his set (the standalone skills routing.md lists, his user-only commands) is only ever
+# suggested to the user by name, so it is not checked.
 REQUIRED_SKILLS = ("grilling", "domain-modeling", "tdd", "diagnosing-bugs", "code-review",
                    "codebase-design", "setup-matt-pocock-skills", "setup-pre-commit",
                    "setup-ts-deep-modules")
-INSTALL = "ask the user to run `npx skills add mattpocock/skills`, then start a new session."
+ASK_TO_INSTALL = "ask the user to run `npx skills add mattpocock/skills`, then start a new session."
 
 
 def without_frontmatter(text: str) -> str:
@@ -67,8 +68,8 @@ def mp_line(config: Path) -> str:
     if not missing:
         return f"- Matt Pocock's skill files: `{skills}/<name>/SKILL.md`."
     if len(missing) == len(REQUIRED_SKILLS):
-        return f"- Matt Pocock's skills are not installed at `{skills}`: {INSTALL}"
-    return f"- Matt Pocock's skills at `{skills}` are missing {', '.join(missing)}: {INSTALL}"
+        return f"- Matt Pocock's skills are not installed at `{skills}`: {ASK_TO_INSTALL}"
+    return f"- Matt Pocock's skills at `{skills}` are missing {', '.join(missing)}: {ASK_TO_INSTALL}"
 
 
 def repo_root(start: Path) -> Path | None:

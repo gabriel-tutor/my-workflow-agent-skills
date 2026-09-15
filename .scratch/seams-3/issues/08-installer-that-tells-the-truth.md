@@ -15,3 +15,7 @@
 - [ ] A real install from this local repo into a fresh `CLAUDE_CONFIG_DIR` succeeds and a session there shows the bootstrap.
 
 **How to verify:** `scripts/test.sh` (the installer suite); then `CLAUDE_CONFIG_DIR=$(mktemp -d) MPW_REPO=$PWD scripts/install.sh` followed by `CLAUDE_CONFIG_DIR=<that dir> claude -p 'which skill applies before a bug fix?'` answering `diagnosing-bugs`.
+
+## Comments
+
+From ticket 03: the session-start hook's missing-skills line says `npx skills add mattpocock/skills` (the README's one-liner at the time), while `install.sh` runs `npx --yes skills@latest add mattpocock/skills --agent claude-code --global`. Make the hook's line (`ASK_TO_INSTALL` in `plugin/hooks/session-start`), the README and the installer agree when this ticket rewrites the install section.
