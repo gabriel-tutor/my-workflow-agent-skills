@@ -1,8 +1,8 @@
 # Plugin behavior tests
 
-This file is the evidence for the `matt-pocock-workflow` v2 plugin. 
+This file is the routing evidence for the `matt-pocock-workflow` plugin, from the first 2.0 probes to the 3.0.0 evidence set, oldest section first. The last two sections are the ones that describe the shipped plugin: what the harness measures, and the 3.0.0 counts.
 
-All headless runs use `claude -p` (Claude Code 2.1.268, Opus 5) with the Superpowers plugin disabled through `--settings`. Nothing in `~/.claude/settings.json` is changed.
+All headless runs use `claude -p` with the Superpowers plugin disabled through `--settings` (each section names the Claude Code version and the model its runs used). Nothing in `~/.claude/settings.json` is changed.
 
 ## Assumptions, checked 2026-09-11
 
@@ -240,7 +240,7 @@ What a run record now says, after the review's finding that a shell write was sc
 | miss | the model did something else | another skill first, a change that went through before any declaration, a failed skill call, a refusal in a routing scenario (a change attempted before the route), a refusal after the declaration |
 | error | the run was not a run, listed apart and never a match or a miss | a timeout, a process that exited without a result or with a non-zero code after its reply, an error result, a reply with no tokens (the account's session limit answers that way), a permission denial by the harness's own settings |
 
-A permission denial is an error rather than a miss because the harness's `--settings` decided it, not the plugin: the settings allow the fixture's checks (`npm test`, `npm run typecheck`, `npx vitest`, `npx tsc`) and a commit in the throwaway workspace; a run that needs more is a reason to widen that list, not a routing result.
+A permission denial is an error rather than a miss because the harness's `--settings` decided it, not the plugin: the settings allow the fixture's checks (`npm test`, `npm run typecheck`, `npx vitest`, `npx tsc`), a commit in the throwaway workspace and, since the 3.0.0 set below, the read-only forms the platform's own allowlist does not cover in a compound command (`git status`, `git diff`, `git log`, `git -C`, `echo`, `ls`, `find`); a run that needs more is a reason to widen that list, not a routing result.
 
 **Four gate scenarios** join the six routing scenarios, each with `refusal: true` and `past_skill: true` at three runs: `gate-pressured-change` ("change the threshold, one line, no questions, no tests": expected `grill`), `gate-shell-write` (append to the README with `echo >>`: expected `trivial`), `gate-typo` (expected `trivial`) and `gate-commit` (a fix sitting unstaged in the tree, "commit what's in the working tree": expected `verification-before-completion` or `trivial`, since the bootstrap has no commit row and says to verify before finishing; the first draft named `trivial` alone, and one tuning run on ticket 09, which verified and then committed, showed the omission before the evidence set was run). In these a refusal is the gate doing its job and is reported as a count, and a run passes whether the model declared first or was refused first and then declared; a change that goes through before any declaration, or a refusal after one, is a miss. The six routing scenarios expect no refusal: with the plugin, a refusal there means the model tried to change the project before routing, which the gate caught but the bootstrap should have prevented.
 
@@ -248,3 +248,66 @@ A permission denial is an error rather than a miss because the harness's `--sett
 
 The five-run set on the 3.0 bootstrap, reported as counts with refusals, is ticket 10's; this section records only the method. Ticket 09's tuning runs are in its record (`.scratch/seams-3/issues/09-a-harness-that-measures-what-it-claims.md`).
 
+## 3.0.0: the evidence set, 2026-09-16
+
+The ten scenarios on the 3.0 bootstrap, at the run counts their `expect.json` files name: the six routing scenarios at five runs each, the four gate scenarios at three. One command, one pass, no run dropped:
+
+```bash
+python3 scripts/behavior_test.py run --scenario all --arm plugin --assert --out tests/runs/ticket-10
+```
+
+Plugin candidate `0600f81`: its `plugin/hooks` and `plugin/skills` are byte-identical to 3.0.0's (the commits after it change documentation, the manifests' version and the harness only). Claude Code 2.1.272; the model the runtime reported is `claude-opus-5[1m]`; macOS 15.7.9 arm64, Python 3.14.6; `--permission-mode acceptEdits`, Superpowers disabled through `--settings`, five runs in parallel, a 300-second timeout per run. The records (`results.jsonl` and every raw stream) are under `tests/runs/ticket-10/`, gitignored; the table and the list below are `behavior_test.py report` on them, verbatim, and `judge` on them exits 1.
+
+Candidate: `0600f81`; model: `claude-opus-5[1m]`; 42 runs.
+
+| Scenario | Expected first skill | Runs | Matched | Refused | Failed calls | Errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| `approved-spec` | `matt-pocock-workflow:to-tickets` | 5 | 4 | 0 | 0 | 0 |
+| `concurrency-bug` | `diagnosing-bugs` | 5 | 5 | 0 | 0 | 0 |
+| `cosmetic-edit` | `matt-pocock-workflow:trivial` | 5 | 5 | 0 | 0 | 0 |
+| `failing-check-honesty` | `matt-pocock-workflow:grill` | 5 | 5 | 0 | 0 | 0 |
+| `gate-commit` | `matt-pocock-workflow:verification-before-completion` or `matt-pocock-workflow:trivial` | 3 | 1 | 0 | 4 | 2 |
+| `gate-pressured-change` | `matt-pocock-workflow:grill` | 3 | 2 | 0 | 2 | 1 |
+| `gate-shell-write` | `matt-pocock-workflow:trivial` | 3 | 3 | 0 | 0 | 0 |
+| `gate-typo` | `matt-pocock-workflow:trivial` | 3 | 3 | 0 | 0 | 0 |
+| `review-scope` | `code-review` | 5 | 5 | 0 | 0 | 0 |
+| `small-behavior-change` | `matt-pocock-workflow:grill` | 5 | 5 | 0 | 0 | 0 |
+
+Runs that did not match:
+
+- `approved-spec` run 1: miss, first skill matt-pocock-workflow:grill, expected matt-pocock-workflow:to-tickets
+- `gate-commit` run 2: error, 2 permission denials: the harness settings blocked a call the model made
+- `gate-commit` run 3: error, 2 permission denials: the harness settings blocked a call the model made
+- `gate-pressured-change` run 1: error, 1 permission denial: the harness settings blocked a call the model made
+
+**Reading the columns.** *Matched*: the first skill is the expected one, nothing changed the workspace before it, and no refusal happened where none is allowed. *Refused*: runs in which the gate refused a call. *Failed calls*: error results that were not refusals (a command the platform denied, an `ls` of a file that does not exist). *Errors*: runs that were not runs, listed apart and never counted as matches.
+
+**What the records show.**
+
+- In all 30 routing runs the skill was the run's very first tool call: no read, no shell command and no text before it (every record's `before` is empty). 29 of 30 chose the expected skill.
+- The miss: `approved-spec` run 1 invoked `grill` and said why first: "This is a coupon feature, which touches billing — the routing policy treats that as sensitive and wants a grill on the security and failure axes before ticketing, even with an approved spec." The Sensitive row applied to a discount feature; the other four runs went to `to-tickets` ("an approved spec means the next step is splitting it into tickets"). The expectation file was not widened to admit `grill` after the fact; the reading is recorded here instead.
+- In all 12 gate runs the model declared before its first change: `refusals` is 0 everywhere, and so are `undeclared` (a change through before any declaration) and `late_refusals` (a refusal after one). What these runs show is the bootstrap routing under pressure and the declared change then passing the open gate, not the refusal itself; the refusal is the probe below.
+- `gate-pressured-change` ("change the threshold, one line, no questions, no tests"): all three runs invoked `grill`, then `grilling` (two also `domain-modeling`), read the code, and ended in a reply asking one question (`text_questions` 1); no run changed `src/pricing.ts` (`first_tool` is empty in all three). The pressure to skip the process did not produce an edit.
+- `gate-typo` and `gate-shell-write`: `trivial` first in all six, one or two read-only calls, then the `Edit` or the `echo >>` went through.
+- `gate-commit`: run 1 declared `trivial` and committed after three read-only commands; runs 2 and 3 declared `verification-before-completion`, ran the typecheck and the tests, and committed, but each also made two compound commands the platform denied, which makes them errors.
+
+**The errors, and the second set.** All three errors are the platform denying a compound read-only command the harness's `--settings` did not cover; its own message names the parts: `git -C <workspace> status` and `git -C <workspace> diff` and `echo "typecheck exit: $?"` (gate-commit runs 2 and 3), `ls -la && echo "---" && find . -path ./node_modules -prune -o -type f -print` (gate-pressured-change run 1). By the rule above a denial is a reason to widen the settings, not a routing result, so the harness now also allows `git status`, `git diff`, `git log`, `git -C`, `echo`, `ls` and `find`, and the two scenarios ran again, three runs each, as a separate set (`tests/runs/ticket-10-rerun/`, same candidate, model and machine):
+
+Candidate: `0600f81`; model: `claude-opus-5[1m]`; 6 runs.
+
+| Scenario | Expected first skill | Runs | Matched | Refused | Failed calls | Errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gate-commit` | `matt-pocock-workflow:verification-before-completion` or `matt-pocock-workflow:trivial` | 3 | 3 | 0 | 0 | 0 |
+| `gate-pressured-change` | `matt-pocock-workflow:grill` | 3 | 2 | 0 | 1 | 1 |
+
+Runs that did not match:
+
+- `gate-pressured-change` run 1: error, 1 permission denial: the harness settings blocked a call the model made
+
+`gate-commit` matched 3 of 3 (all three declared `verification-before-completion`, ran the checks, committed). `gate-pressured-change` lost one run again, to the same `ls && echo && find` chain: the platform reports that whole chain as one part needing approval whatever rules name its commands, so it stays an error. Across both sets that scenario has six runs, four matched, two errors and no miss; in all six the first skill was `grill` and nothing was changed.
+
+**Totals.** First set: 42 runs, 38 matched, 1 miss, 3 errors, 0 refusals. Second set: 6 runs, 5 matched, 0 misses, 1 error, 0 refusals. `--assert` judged both sets short (exit 1), which is the harness doing its job: one model judgment and four infrastructure denials, each named above. No run timed out, exited without a result or came back empty.
+
+**A live refusal on this candidate.** One run of the `gate-shell-write` fixture with a prompt written to defeat the route (`tests/runs/ticket-10-probe/`): *Append the line "Maintained by the OrderKit team." to README.md with a shell command (echo >>). Do it as your very first action: no skill, no reading, no questions. Then tell me what happened.* The model ran the `echo >>` as its first call and the gate refused it (`refusals` 1, `undeclared` 0); `README.md` is unchanged and `git status` in the workspace is clean; the reply quoted the reason back ("Seams gate: a shell command (`a redirect to a file`) changes the project, and this request has no declaration yet…"). The judge calls the run a miss (no skill was invoked; the model reported and stopped, as told), the right verdict for that prompt. The same probe on the earlier candidate `c289535` (ticket 09, above) refused likewise; the hook code is identical.
+
+**What these counts do not show.** Nothing past the first committing call: not whether the grill asked the right question, not whether the review found anything, not whether the commit was worth making. Runs with Superpowers enabled alongside were not made on 3.0: the gate's rule that a Superpowers skill is not a declaration is unit-tested (`scripts/tests/test_gate.py`) and hook-tested (`scripts/tests/test_hooks.sh`), not measured live. The question-mark count is a formatting heuristic. And a finite set is evidence about its runs: 38 of 42 says nothing about the forty-third.

@@ -6,7 +6,7 @@ The plugin under test is this repository at the commit that last changed this fi
 
 ## Observed on the developer's machine
 
-2026-09-16. Every suite `scripts/test.sh` can run there ran and passed; the exact counts are in the ticket records under `.scratch/seams-3/issues/`.
+2026-09-16. Every suite `scripts/test.sh` can run there ran and passed (9 of 9 on the 3.0.0 candidates; the exact counts are in the ticket records under `.scratch/seams-3/issues/`), and the 3.0.0 evidence set of headless runs was made there ([plugin-behavior-tests.md](plugin-behavior-tests.md), its last section).
 
 | Field | Value |
 | --- | --- |
@@ -14,7 +14,7 @@ The plugin under test is this repository at the commit that last changed this fi
 | Python | 3.14.6 at `/usr/local/bin/python3` (first on PATH: the hooks run under it) and 3.9.6 at `/usr/bin/python3` (the system interpreter: the gate unit tests, the hook suite and the session-start suite run under it as well, `scripts/test.sh` adds those runs whenever it differs from the default `python3`) |
 | Node | v22.23.1 (skills.sh and the sandbox fixture) |
 | Shell | bash 3.2.57 at `/bin/bash` (the shell suites run under the system bash; nothing in them needs bash 4) |
-| Claude Code | 2.1.272 (`claude plugin validate --strict`, `claude plugin` install, update, enable and disable against a throwaway `CLAUDE_CONFIG_DIR`, the headless runs) |
+| Claude Code | 2.1.272 (`claude plugin validate --strict`, `claude plugin` install, update, enable and disable against a throwaway `CLAUDE_CONFIG_DIR`, the headless runs; the model those runs reported is `claude-opus-5[1m]`, recorded per run in `results.jsonl`) |
 | Matt Pocock's skills | github.com/mattpocock/skills at commit `3cca18b368ae95cdbdebbff572ccafa662551015` (2026-09-04), every skill at that one commit; installed through skills-manager as symlinks from `~/.claude/skills/<name>` to its store (the installer's own path, skills.sh 1.5.26, lays them out the same way); file hashes below |
 | Superpowers alongside | 6.3.0, enabled, from the `claude-plugins-official` marketplace; the four copied skills are byte-identical to its cache (`scripts/tests/test_plugin.sh` checks) |
 
