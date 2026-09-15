@@ -96,7 +96,7 @@ C=$(context "$FIX" "$BARE_HOME" "$PLAIN" "$CUSTOM_CONFIG")
 # A partial install is reported as what it is: the missing names and the install command,
 # never "installed" on the strength of one sentinel file, and never a present name as missing.
 C=$(context "$FIX" "$PARTIAL_HOME" "$PLAIN")
-[[ "$C" == *"missing codebase-design, setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills"* ]] \
+[[ "$C" == *"missing codebase-design, setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills -g -a claude-code"* ]] \
   || fail "partial install not reported with the missing names and the install command: $C"
 [[ "$C" != *"skill files"* ]] || fail "partial install reported as installed: $C"
 MISSING_LINE=$(grep missing <<< "$C")
@@ -111,7 +111,7 @@ done
 
 # No install at all says so, with the install command.
 C=$(context "$FIX" "$BARE_HOME" "$PLAIN")
-[[ "$C" == *"not installed"* && "$C" == *"npx skills add mattpocock/skills"* ]] || fail "MP not-installed line missing for a bare home: $C"
+[[ "$C" == *"not installed"* && "$C" == *"npx skills add mattpocock/skills -g -a claude-code"* ]] || fail "MP not-installed line missing for a bare home: $C"
 
 # The repo-setup line appears only inside a git repo that lacks docs/agents/issue-tracker.md.
 C=$(context "$FIX" "$MP_HOME" "$REPO_UNSET/sub/dir")

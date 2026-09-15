@@ -1,12 +1,12 @@
 # Compatibility
 
-What Seams was tested with, and where. "Tested" means `scripts/test.sh` passed on that combination: the gate module's unit tests, the hook suites fed JSON on stdin, the session-start suite against fixture homes, the installer suite against a stub `claude`, the static plugin checks (where the `claude` CLI exists) and the sandbox-workspace suite. The live headless runs (the model choosing a route) are recorded separately in [plugin-behavior-tests.md](plugin-behavior-tests.md). A combination not listed here is untested, not unsupported; Windows is unsupported (the hooks are Python executables run through `env`).
+What Seams was tested with, and where. "Tested" means `scripts/test.sh` passed on that combination: the gate module's unit tests, the hook suites fed JSON on stdin, the session-start suite against fixture homes, the installer suite against a stub `claude`, the static plugin checks (where the `claude` CLI exists) and the sandbox-workspace suite. The live headless runs (the model choosing a route) are recorded separately in [plugin-behavior-tests.md](plugin-behavior-tests.md). A combination not listed here is untested, not unsupported; Windows is unsupported (the hooks are Python executables run through `env`). The installer prints a pointer to this file at the end of every run.
 
-The plugin under test is this repository at the commit that last changed this file (`git log -1 --format=%h -- docs/compatibility.md`). The installer prints a pointer to this file at the end of every run.
+The plugin under test is this repository at the commit that last changed this file (`git log -1 --format=%h -- docs/compatibility.md`).
 
-## Observed
+## Observed on the developer's machine
 
-The developer's machine, 2026-09-16. Every suite `scripts/test.sh` can run there ran and passed; the exact counts are in the ticket records under `.scratch/seams-3/issues/`.
+2026-09-16. Every suite `scripts/test.sh` can run there ran and passed; the exact counts are in the ticket records under `.scratch/seams-3/issues/`.
 
 | Field | Value |
 | --- | --- |
@@ -34,9 +34,17 @@ c9819d7f1e3b198064edc1faa3154224ed67395e9f07f5d3cea4b67cf0a11a98  setup-pre-comm
 
 To compare your install: `cd "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" && shasum -a 256 -c` with the block above on stdin. A differing hash means his skill moved on since this record; the plugin invokes it by name and does not depend on its text. The three skills Seams adapted from his (`to-spec`, `to-tickets`, `implement`) are recorded with their upstream hashes in `plugin/THIRD_PARTY_NOTICES.md`, and `test_plugin.sh` warns when the installed copies differ.
 
-## Declared, not yet observed
+## Observed on CI
 
-`.github/workflows/test.yml` runs `scripts/test.sh` on every push to `main` and on pull requests, on `ubuntu-latest` and `macos-latest` with Node 22 and Python 3.12 (`actions/setup-python`; on the macOS runner the system Python 3.9 suites run as well, since it differs). The `claude` CLI is not installed there, so the static plugin checks are skipped on CI and count only from a machine with the CLI. No run has happened yet: the workflow was added after the last push, and the 3.0.0 push (ticket 10) is the first one. This section becomes an observed row, with the runner images and the counts, once that run is green.
+The first run of `.github/workflows/test.yml`, on candidate `65764f4` through a throwaway pull request (run 35006946323, 2026-09-15 18:21 UTC; the workflow runs on every push to `main` and on pull requests). Both runners use Node 22.23.2 and the `claude` CLI is absent, so `test_plugin` (manifest validation, the static checks) is skipped there and counts only from a machine with the CLI.
+
+| Field | ubuntu-latest | macos-latest |
+| --- | --- | --- |
+| Operating system | Ubuntu 24.04.5 LTS, x64 (image `ubuntu-24.04` 20260907.300.1) | macOS 26.6.2 (25G83), arm64 (image `macos-26-arm64` 20260907.0351.1) |
+| Python | 3.12.14 (`actions/setup-python`); the system `python3` is the same 3.12, so the system-Python suites are skipped | 3.12.10 (`actions/setup-python`) and the system 3.9.6, under which the gate unit tests, the hook suite and the session-start suite ran as well |
+| Result | 4 passed, 1 failed, 2 skipped: `test_hooks` fails at "ledger should be mode 600"; `test_install`, `test_plugin_hook`, the unit tests and `test_prepare_run` pass | 8 passed, 0 failed, 1 skipped (`test_plugin`) |
+
+The Ubuntu failure is in the gate's hook suite (ticket 01), not in the installer: the check reads the ledger's mode with `stat -f '%Lp'` first and falls back to GNU `stat -c '%a'` only when that fails. It is recorded here as observed and left to its own fix; until it is green, Ubuntu counts as tested for the installer, the session-start hook, the harness scanner and the sandbox suite, and untested for the gate hooks.
 
 ## Not tested
 

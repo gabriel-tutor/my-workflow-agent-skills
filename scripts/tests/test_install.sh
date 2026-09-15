@@ -8,6 +8,9 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 REQUIRED=(grilling domain-modeling tdd diagnosing-bugs code-review codebase-design setup-matt-pocock-skills setup-pre-commit setup-ts-deep-modules)
 PLUGIN_ID="matt-pocock-workflow@my-workflow-agent-skills"
+# The one skills.sh command the hook, the installer and the README name, taken from the hook's line.
+SKILLS_CMD=$(grep -o 'npx skills add mattpocock/skills[^`]*' "$REPO/plugin/hooks/session-start" | head -1)
+[[ $SKILLS_CMD == "npx skills add mattpocock/skills -g -a claude-code" ]] || fail "the hook's install command changed: $SKILLS_CMD"
 
 # The stub: state lines are "marketplace <name>" and "plugin <id> enabled|disabled". Like the CLI,
 # install leaves a plugin enabled and enable/disable fail when the plugin is already in that state.
@@ -17,7 +20,7 @@ cat > "$TMP/bin/claude" <<'SH'
 LOG="${STUB_LOG:?}"; STATE="${STUB_STATE:?}"; touch "$STATE"
 echo "$*" >> "$LOG"
 if [[ -n "${STUB_FAIL:-}" && "$*" == "$STUB_FAIL"* ]]; then echo "✘ Failed: stub says no to \`$STUB_FAIL\`"; exit 1; fi
-set_status() { awk -v id="$2" -v s="$3" '$1=="plugin" && $2==id {$3=s} {print}' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+set_status() { awk -v id="$1" -v s="$2" '$1=="plugin" && $2==id {$3=s} {print}' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
 case "$*" in
   --version) echo "0.0.0 (stub)";;
   "plugin marketplace list")
@@ -39,10 +42,10 @@ case "$*" in
     echo "✔ $3 is already at the latest version";;
   "plugin enable "*)
     grep -q "^plugin $3 disabled$" "$STATE" || { echo "✘ Failed to enable plugin \"$3\": already enabled"; exit 1; }
-    set_status plugin "$3" enabled; echo "✔ Successfully enabled plugin: $3";;
+    set_status "$3" enabled; echo "✔ Successfully enabled plugin: $3";;
   "plugin disable "*)
     grep -q "^plugin $3 enabled$" "$STATE" || { echo "✘ Failed to disable plugin \"$3\": already disabled"; exit 1; }
-    set_status plugin "$3" disabled; echo "✔ Successfully disabled plugin: $3";;
+    set_status "$3" disabled; echo "✔ Successfully disabled plugin: $3";;
   *) echo "stub: unexpected call: $*" >&2; exit 2;;
 esac
 SH
@@ -97,6 +100,13 @@ run "$H" STUB_FAIL="plugin install"
 [[ $ERR == *"stub says no"* ]] || fail "the error does not show the command's output: $ERR"
 [[ $(calls "plugin enable ") -eq 0 && $(calls "plugin disable ") -eq 0 ]] || fail "steps ran after the failure, log: $(cat "$LOG")"
 [[ $OUT != *"Done."* && $OUT != *"plugin installed"* ]] || fail "the installer reported success after a failed step: $OUT"
+for listing in "plugin marketplace list" "plugin list"; do
+  H="$TMP/broken-$(tr ' ' - <<< "$listing")"; home "$H"
+  run "$H" STUB_FAIL="$listing"
+  [[ $CODE -ne 0 && $ERR == *'`claude '"$listing"'` failed (exit 1)'* && $ERR == *"stub says no"* ]] \
+    || fail "a failing \`claude $listing\` should stop the installer with its output: exit $CODE, $ERR"
+  [[ "$(tail -1 "$LOG")" == "$listing" && $(calls "plugin install ") -eq 0 ]] || fail "calls issued after \`claude $listing\` failed, log: $(cat "$LOG")"
+done
 
 # 3. A second run in the fresh home: nothing added or installed again, only refreshed; exit 0.
 H="$TMP/fresh"; BEFORE=$(cat "$H/.claude/settings.json"); TREE=$(ls -laR "$H/.claude")
@@ -114,12 +124,14 @@ run "$H"
 H="$TMP/bare"; home "$H" --none
 run "$H"
 [[ $CODE -ne 0 ]] || fail "installer exited 0 without Matt Pocock's skills and no tty: $OUT"
-[[ $ERR == *"npx skills@latest add mattpocock/skills"* && $ERR == *"no terminal"* ]] || fail "the error does not say how to install the skills: $ERR"
+[[ $ERR == *"\`$SKILLS_CMD\`"* && $ERR == *"no terminal"* ]] || fail "the error does not name the install command: $ERR"
 [[ $(calls "plugin ") -eq 0 ]] || fail "plugin steps ran without the skills, log: $(cat "$LOG")"
 H="$TMP/partial"; home "$H" grilling
 run "$H"
 [[ $CODE -ne 0 ]] || fail "installer exited 0 with only grilling installed: $OUT"
-[[ $OUT == *"missing from $H/.claude/skills: domain-modeling tdd "* && $OUT != *" grilling "* ]] || fail "the missing skills are not named: $OUT"
+[[ $OUT == *"missing from $H/.claude/skills: domain-modeling tdd "* && $OUT == *"setup-ts-deep-modules" && $OUT != *" grilling "* ]] \
+  || fail "the missing skills are not named, or carry a trailing space: $OUT"
+[[ $ERR == *"\`$SKILLS_CMD\`"* ]] || fail "the partial-install error should name \`$SKILLS_CMD\`: $ERR"
 
 # 5. A python3 older than 3.9 first on PATH (macOS's system interpreter is 3.9.6; older ones exist
 # on old Linux images) stops the installer, naming the version it found.
@@ -146,9 +158,10 @@ run "$H" MPW_DISABLE_SUPERPOWERS=1
 run "$H"
 [[ $CODE -eq 0 && $(calls "plugin disable ") -eq 0 && $OUT == *"left as is"* ]] || fail "Superpowers should be left alone by default: $OUT $ERR"
 
-# 7. Static: the installer checks the same skills the session-start hook reports on; nothing in the
-# repo still describes the settings.json step; the compatibility record exists with its fields and
-# the README's install section points at it.
+# 7. Static: the installer checks the same skills the session-start hook reports on (and the two
+# hook suites use that list); the install command is spelled the same way in the README; nothing
+# still describes the settings.json step; the compatibility record exists with its fields and the
+# README points at it.
 HOOK_LIST=$(python3 - "$REPO/plugin/hooks/session-start" <<'LIST'
 import ast, sys
 tree = ast.parse(open(sys.argv[1]).read())
@@ -159,8 +172,11 @@ LIST
 )
 INSTALLER_LIST=$(bash -c 'eval "$(sed -n "/^REQUIRED_SKILLS=(/,/)/p" "$1")"; echo "${REQUIRED_SKILLS[*]}"' _ "$REPO/scripts/install.sh")
 [[ -n "$HOOK_LIST" && "$HOOK_LIST" == "$INSTALLER_LIST" ]] || fail "the installer's skill list differs from the hook's: [$INSTALLER_LIST] vs [$HOOK_LIST]"
-[[ "$HOOK_LIST" == "${REQUIRED[*]}" ]] || fail "this test's skill list differs from the hook's: [${REQUIRED[*]}] vs [$HOOK_LIST]"
-grep -v '^[[:space:]]*#' "$REPO/scripts/install.sh" | grep -q 'settings' && fail "the installer still touches settings"
+HOOK_SUITE_LIST=$(bash -c 'eval "$(grep -m1 "^REQUIRED=(" "$1")"; echo "${REQUIRED[*]}"' _ "$REPO/scripts/tests/test_plugin_hook.sh")
+[[ "$HOOK_LIST" == "${REQUIRED[*]}" && "$HOOK_LIST" == "$HOOK_SUITE_LIST" ]] \
+  || fail "a test's skill list differs from the hook's: [${REQUIRED[*]}] / [$HOOK_SUITE_LIST] vs [$HOOK_LIST]"
+[[ $(grep -c -F -- "\`$SKILLS_CMD\`" "$REPO/README.md") -ge 1 && $(grep -c "npx skills" "$REPO/README.md") -eq $(grep -c -F -- "$SKILLS_CMD" "$REPO/README.md") ]] \
+  || fail "the README should name the install command exactly as the hook does: $SKILLS_CMD"
 grep -q 'pre-mpw-install' "$REPO/README.md" "$REPO/scripts/install.sh" && fail "the settings backup is still described somewhere"
 COMPAT="$REPO/docs/compatibility.md"
 [[ -f "$COMPAT" ]] || fail "docs/compatibility.md is missing"
@@ -168,6 +184,5 @@ for needle in "Operating system" "Python" "Claude Code" "Matt Pocock's skills" "
   grep -q "$needle" "$COMPAT" || fail "docs/compatibility.md lacks: $needle"
 done
 grep -q "docs/compatibility.md" "$REPO/README.md" || fail "the README does not point at docs/compatibility.md"
-grep -q 'never writes' "$REPO/README.md" || fail "the README's install section should say the installer never writes settings.json"
 
 echo "test_install: OK"

@@ -38,11 +38,13 @@ BOOTSTRAP = HERE / "skills" / "using-matt-pocock-skills" / "SKILL.md"
 PREAMBLE = "Your `matt-pocock-workflow:using-matt-pocock-skills` skill, this session's routing policy:"
 # The Matt Pocock skills the bootstrap and the Seams skills invoke with the Skill tool. The
 # rest of his set (the standalone skills routing.md lists, his user-only commands) is only ever
-# suggested to the user by name, so it is not checked.
+# suggested to the user by name, so it is not checked. scripts/install.sh checks the same list and
+# names the same install command (global, Claude Code only; without -g skills.sh installs into
+# the current project); scripts/tests/test_install.sh keeps the two in step.
 REQUIRED_SKILLS = ("grilling", "domain-modeling", "tdd", "diagnosing-bugs", "code-review",
                    "codebase-design", "setup-matt-pocock-skills", "setup-pre-commit",
                    "setup-ts-deep-modules")
-ASK_TO_INSTALL = "ask the user to run `npx skills add mattpocock/skills` and start a new session."
+ASK_TO_INSTALL = "ask the user to run `npx skills add mattpocock/skills -g -a claude-code` and restart."
 
 
 def without_frontmatter(text: str) -> str:
