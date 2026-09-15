@@ -117,7 +117,10 @@ for h in pre-tool-use post-tool-use user-prompt-submit session-start stop; do
   [[ -z "$OUT" ]] || fail "$h should print nothing on garbage: $OUT"
 done
 
-# 12. The ledger is private to the user.
-[[ "$(stat -f '%Lp' "$LEDGER" 2>/dev/null || stat -c '%a' "$LEDGER")" == "600" ]] || fail "ledger should be mode 600"
+# 12. The ledger is private to the user. The mode is read through the interpreter rather than
+# stat: BSD stat takes -f as a format, GNU stat as "file-system status", which prints a block for
+# the file operand and exits 1 for the format operand, so the BSD-first fallback caught both.
+MODE=$("$PY" -c 'import os, sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[-3:])' "$LEDGER")
+[[ "$MODE" == "600" ]] || fail "ledger should be mode 600, is $MODE"
 
 echo "test_hooks ($($PY --version 2>&1)): OK"
