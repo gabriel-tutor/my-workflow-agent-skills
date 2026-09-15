@@ -23,12 +23,12 @@ Look, don't ask. Check each item and note *present*, *missing*, or *partial*, wi
 | Boundary enforcement | dependency rules such as `.dependency-cruiser.*`, or a monorepo tool that enforces package boundaries |
 | Environment and secrets | `.env.example` naming every variable the code reads, and `.env` in `.gitignore` |
 | Deploy target and pipeline | where the code runs (a platform config, a deploy workflow or script, a store or registry manifest) and how a commit gets there |
-| Environments and config | the environments named (staging, production, or the target's tracks), each variable's source per environment, secrets in the platform's store and not in the repo |
+| Environments and config | the environments named (staging, production, or the target's tracks), where each variable's value comes from per environment (the platform's config, not the repo), secrets in the platform's store |
 | Backups and restore | for persistent data: scheduled backups, and a restore that has been rehearsed (a runbook line or a script) |
 | Monitoring and alerts | error tracking or logs a person can reach, an alert that reaches a person, a health or version endpoint |
 | Dependency and secret scanning | a dependency audit and a secret scan in CI or pre-commit (`npm audit`, Dependabot or Renovate, gitleaks, `detect-secrets`) |
 
-Skip an item that can't apply (no CI for a scratch script; no boundary rules for a single file). The five production rows are skipped for a library, a package consumed by other code, or a script that is not deployed anywhere: mark them *not applicable* with the reason, so the report says why rather than leaving them out.
+An item that can't apply is marked *not applicable* with the reason, never left out (no CI for a scratch script; no boundary rules for a single file). The five production rows are not applicable for a library or package that is published nowhere and for a script that is deployed nowhere. A published package has a target (its registry), a pipeline and scanning; only backups and monitoring are not applicable for it.
 
 ## 2. Report
 

@@ -9,13 +9,13 @@ Take an integrated candidate to its target and prove that exact candidate is wha
 
 ## Gate
 
-Establish three facts before anything else, from the repo where the repo can answer (facts are not questions):
+Establish three facts, from the repo where the repo can answer (facts are not questions):
 
-1. **Candidate.** The exact commit: the SHA the user names, or `git rev-parse HEAD` on the integrated branch with a clean tree. A dirty tree or an unmerged branch is not a candidate; say so and stop until it is.
+1. **Candidate.** The exact commit: the SHA the user names, or `git rev-parse HEAD` on the base branch with a clean tree. A dirty tree has no candidate. A candidate still on its own branch is *built*, not integrated: integrate it first (`matt-pocock-workflow:finishing-a-development-branch`) and release from the base branch.
 2. **Target.** Where the work runs: the user's words, the spec's Release section, or the repo's deploy configuration (a platform config file, a deploy workflow or script, a publish script, a store or marketplace manifest). See the target table below.
 3. **Environment.** The environments the target has (staging, preview, a test track, production) and which one this release is for.
 
-What the repo cannot answer is an unmet row in the readiness table, asked there. Do not ask for what a file already says.
+Then ask with AskUserQuestion, recommended answer first: "Release candidate `<sha>` to `<target>`, environment `<environment>`: check readiness now?" Skip this only when the user's last message asked for the release; reaching this skill on your own initiative always asks. What the repo cannot answer is an unmet row in the readiness table, asked there; do not ask for what a file already says.
 
 ## Readiness
 
@@ -24,7 +24,7 @@ Check every row and report one table: row, ready / unmet / not applicable, and t
 | Row | What counts as ready |
 | --- | --- |
 | Target and environment | named (the gate's facts) and reachable: the platform's CLI or skill is installed and signed in. With no deploy target, this row is unmet: report "no deploy target" and ask for one |
-| Integrated candidate | the SHA is on the base or release branch, `git status --short` is empty, and the candidate is what the review and the definition of done referred to |
+| Integrated candidate | the SHA is on the base branch, `git status --short` is empty, and the candidate is what the review and the definition of done referred to |
 | Suite green on that SHA | the full suite ran on the candidate with its output shown; evidence gathered on the same SHA by `matt-pocock-workflow:implement` is reused, not re-run |
 | Artifact built and identified | built with the repo's own build command and named by version and SHA (image tag, package version, bundle, installer) |
 | Config and variables per environment | every variable the code reads is named per environment (`.env.example`, the platform's config), secrets live in the platform's store, none in the artifact or the repo |
@@ -56,9 +56,9 @@ Against the environment just deployed, with the output shown:
 The closing message, in this order:
 
 1. **Monitoring and alert owner.** Where errors and health are watched, and the person an alert reaches.
-2. **Runbook.** Where the runbook is (deploy, roll back, restore, who to page), or the skeleton written for it, shown before writing.
+2. **Runbook.** Where the runbook is. When there is none, say so and offer `matt-pocock-workflow:foundations`, whose offer writes the skeleton.
 3. **Follow-ups.** Tickets for anything deferred: an unmet row closed provisionally, a check marked not applicable that should exist, the production deploy still to come.
-4. **Stage reached.** One of the six: designed, built, integrated, release-ready, deployed, operated. Say which environment the candidate is deployed to, or that it stopped at readiness and why.
+4. **Stage reached.** One of the six: designed, built, integrated, release-ready, deployed, operated. *Release-ready* once every readiness row is ready; *deployed* to the named environment once Verify passed there; *operated* once monitoring, the alert owner and the runbook exist for it. A release that stopped at readiness leaves the candidate at the stage it arrived with (*integrated* on the base branch, *built* on a branch) and says why it stopped.
 
 ## Targets
 

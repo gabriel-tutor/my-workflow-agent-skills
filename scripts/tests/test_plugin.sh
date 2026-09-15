@@ -7,6 +7,18 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PLUGIN="$REPO/plugin"
 fail() { echo "FAIL: $*" >&2; exit 1; }
+headings_in_order() {   # $1 = skill name, $2 = file, $3... = "## " headings that must appear in this order
+  local name="$1" file="$2" prev=0 n h; shift 2
+  for h in "$@"; do
+    n=$(grep -nxF "$h" "$file" | head -1 | cut -d: -f1) || fail "$name lacks the heading: $h"
+    (( n > prev )) || fail "$name: heading out of order: $h"
+    prev=$n
+  done
+}
+must_say() {   # $1 = skill name, $2 = file, $3... = phrases the file must contain verbatim
+  local name="$1" file="$2" needle; shift 2
+  for needle in "$@"; do grep -qF -- "$needle" "$file" || fail "$name should say: $needle"; done
+}
 
 claude plugin validate --strict "$PLUGIN" >/dev/null || fail "plugin manifest does not validate"
 claude plugin validate --strict "$REPO" >/dev/null || fail "marketplace manifest does not validate"
@@ -42,7 +54,7 @@ for s in to-spec to-tickets implement; do
   case $s in
     to-spec)    headings=("## Gate" "## Process" "## Spec template" "## Next")
                 needles=("Write the spec now?" "instead of asking again" "Alternatives considered" "Risks and failure modes"
-                         "Rollout and migration" "Observability" "**Release**" "ships anywhere" "spec's title and where it will go"
+                         "Rollout and migration" "Observability" "**Release**" "deployment target" "spec's title and where it will go"
                          "ready-for-agent") ;;
     to-tickets) headings=("## Gate" "## Process" "## Ticket templates" "## Next")
                 needles=("How to verify" "Blocked by" "granularity" "Iterate until the user approves" "ready-for-agent"
@@ -53,13 +65,8 @@ for s in to-spec to-tickets implement; do
                          "**Run it.**" "**Try it.**" "**What changed.**" "**Next.**" "stage reached"
                          "designed, built, integrated, release-ready, deployed, operated") ;;
   esac
-  prev=0
-  for h in "${headings[@]}"; do
-    n=$(grep -nxF "$h" "$f" | head -1 | cut -d: -f1) || fail "$s lacks the heading: $h"
-    (( n > prev )) || fail "$s: heading out of order: $h"
-    prev=$n
-  done
-  for needle in "${needles[@]}"; do grep -qF -- "$needle" "$f" || fail "$s should say: $needle"; done
+  headings_in_order "$s" "$f" "${headings[@]}"
+  must_say "$s" "$f" "${needles[@]}"
   last=$(grep -v '^[[:space:]]*$' "$f" | tail -1)
   [[ $last == *"Matt Pocock"* && $last == *"MIT"* && $last == *"$MP_COMMIT"* ]] \
     || fail "$s: the last line does not attribute the upstream skill, license and commit: $last"
@@ -88,29 +95,19 @@ DRIFT=$(upstream_drift "$FIXTURE"); rm -rf "$FIXTURE"
 [[ $DRIFT == *"WARN: installed to-spec/SKILL.md differs"* ]] || fail "the drift check did not warn on a changed upstream file: $DRIFT"
 [[ $DRIFT == *"note: $FIXTURE/skills/implement/SKILL.md is not installed"* ]] || fail "the drift check did not note a missing upstream file: $DRIFT"
 
-# The release skill (ticket 05): the stages past the merge, in order, and the rules that keep a
+# The release skill (ticket 05): the sections past the merge, in order, and the rules that keep a
 # deploy behind an explicit yes and a verified candidate.
 REL="$PLUGIN/skills/release/SKILL.md"
 [[ -f "$REL" ]] || fail "release skill missing"
-prev=0
-for h in "## Gate" "## Readiness" "## Deploy" "## Verify" "## Operations handover" "## Targets"; do
-  n=$(grep -nxF "$h" "$REL" | head -1 | cut -d: -f1) || fail "release lacks the heading: $h"
-  (( n > prev )) || fail "release: heading out of order: $h"
-  prev=$n
-done
-for needle in "Anything unmet blocks" "the target, the environment and the candidate" "every time" "staged environment" \
-              "running version" "smoke" "abort" "rollback" "runbook" "alert owner" "Stage reached" "no deploy target" \
-              "Web host" "Container or VPS" "Mobile store" "CLI or library registry" "Browser extension store" "Desktop"; do
-  grep -qF -- "$needle" "$REL" || fail "release should say: $needle"
-done
+headings_in_order release "$REL" "## Gate" "## Readiness" "## Deploy" "## Verify" "## Operations handover" "## Targets"
+must_say release "$REL" "check readiness now?" "Anything unmet blocks" "the target, the environment and the candidate" \
+  "every time" "staged environment" "running version" "smoke" "abort" "rollback" "runbook" "alert owner" "Stage reached" \
+  "no deploy target" "Web host" "Container or VPS" "Mobile store" "CLI or library registry" "Browser extension store" "Desktop"
 
-# Foundations (ticket 05): the five production rows, their skip rule, and the new offers.
-FOUND="$PLUGIN/skills/foundations/SKILL.md"
-for needle in "| Deploy target and pipeline |" "| Environments and config |" "| Backups and restore |" \
-              "| Monitoring and alerts |" "| Dependency and secret scanning |" "not applicable" "library" \
-              "runbook" ".env.example" "platform's skill"; do
-  grep -qF -- "$needle" "$FOUND" || fail "foundations should say: $needle"
-done
+# Foundations (ticket 05): the five production rows, their not-applicable rule, and the new offers.
+must_say foundations "$PLUGIN/skills/foundations/SKILL.md" "| Deploy target and pipeline |" "| Environments and config |" \
+  "| Backups and restore |" "| Monitoring and alerts |" "| Dependency and secret scanning |" "not applicable" \
+  "published nowhere" "runbook" ".env.example" "platform's skill"
 
 # The grill's design lens: present, and referenced from the grill.
 [[ -f "$PLUGIN/skills/grill/references/design-lens.md" ]] || fail "design-lens.md missing"

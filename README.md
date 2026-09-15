@@ -16,7 +16,7 @@ Restart Claude Code, open any repo, and say one of these:
 
 | Say | What happens |
 | --- | --- |
-| *"check what this repo has and what it's missing"* | a foundations survey: run and verify commands, lint, hooks, CI, glossary, boundaries; gaps reported, fixes offered, nothing written without a yes |
+| *"check what this repo has and what it's missing"* | a foundations survey: run and verify commands, lint, hooks, CI, glossary, boundaries, and the production basics (pipeline, environments, backups, monitoring, scanning); gaps reported, fixes offered, nothing written without a yes |
 | *"X is broken when Y"* | `diagnosing-bugs`: a reproducing loop first, then ranked hypotheses, then a regression test, then the fix |
 | *"add <feature>"* | a design grill, one clickable question at a time, until nothing is assumed; then implementation with tests first, review, and a handover |
 | *a typo fix* | just the edit |
@@ -111,7 +111,7 @@ Matt Pocock's method plus the rigor around it that neither collection carried:
 - **Design lens.** Before the grill calls a design complete, it checks ten axes a design review covers: data model, interfaces and seams, failure modes, scale, security boundaries, observability, migration and rollout, testing strategy, operability, cost and reversibility. A bounded change touches three; a multi-session build visits all ten and the answers go into the spec (alternatives considered, risks, rollout, observability).
 - **Definition of done.** A ticket isn't done until the seam and full-suite tests pass, typecheck and lint pass, every acceptance criterion is checked one by one, there are no debug leftovers, docs are updated where behavior changed, and the commit says what and why.
 - **Handover.** Every ticket ends with four parts: how to run it, what to try per acceptance criterion, what changed (and any decision the ticket didn't settle), and what's next, including whether to `/clear`. Every ticket from `to-tickets` carries a "How to verify" line for the same reason.
-- **Foundations.** On first work in a repo, the `foundations` skill surveys run and verify commands, lint, pre-commit hooks, CI, glossary, issue-tracker config, boundary rules and `.env.example`, reports the gaps scaled to the repo's size, and offers to close them through the existing setup skills. It writes nothing without a yes.
+- **Foundations.** On first work in a repo, the `foundations` skill surveys run and verify commands, lint, pre-commit hooks, CI, glossary, issue-tracker config, boundary rules, `.env.example`, and the production basics (deploy target and pipeline, environments and config, backups and restore, monitoring and alerts, dependency and secret scanning; not applicable for a library or a script), reports the gaps scaled to the repo's size, and offers to close them through the existing setup skills or the platform's own. It writes nothing without a yes.
 
 ## How to use it
 
@@ -169,7 +169,7 @@ Or re-run the installer, which does the same.
 
 > *"I'm starting work in this repo. Check what it has and what it's missing."*
 
-That runs `foundations`: a survey of run and verify commands, lint, pre-commit hooks, CI, glossary, issue-tracker config, boundary rules and `.env.example`, with the gaps reported and each fix offered. The one piece only you can run is `/setup-matt-pocock-skills`, which configures the issue tracker (local markdown under `.scratch/` works for solo repos), the triage labels and where `CONTEXT.md` and ADRs live; `to-spec`, `to-tickets`, `code-review` and `triage` read that configuration. The bootstrap reminds you until it exists.
+That runs `foundations`: a survey of run and verify commands, lint, pre-commit hooks, CI, glossary, issue-tracker config, boundary rules, `.env.example` and the production basics (pipeline, environments, backups, monitoring, scanning), with the gaps reported and each fix offered. The one piece only you can run is `/setup-matt-pocock-skills`, which configures the issue tracker (local markdown under `.scratch/` works for solo repos), the triage labels and where `CONTEXT.md` and ADRs live; `to-spec`, `to-tickets`, `code-review` and `triage` read that configuration. The bootstrap reminds you until it exists.
 
 ### Then just work
 

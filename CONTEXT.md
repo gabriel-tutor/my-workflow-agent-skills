@@ -64,3 +64,7 @@ _Avoid_: bug, hotfix, emergency
 **Release**:
 Taking a candidate to the deployment target and proving that exact candidate is what runs.
 _Avoid_: deploy (one step of it), ship, launch
+
+**Operations handover**:
+The closing message of a release: monitoring and alert owner, runbook, follow-ups, stage reached.
+_Avoid_: summary, wrap-up
