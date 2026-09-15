@@ -42,13 +42,16 @@ for s in to-spec to-tickets implement; do
   case $s in
     to-spec)    headings=("## Gate" "## Process" "## Spec template" "## Next")
                 needles=("Write the spec now?" "instead of asking again" "Alternatives considered" "Risks and failure modes"
-                         "Rollout and migration" "Observability" "spec's title and where it will go" "ready-for-agent") ;;
+                         "Rollout and migration" "Observability" "**Release**" "ships anywhere" "spec's title and where it will go"
+                         "ready-for-agent") ;;
     to-tickets) headings=("## Gate" "## Process" "## Ticket templates" "## Next")
-                needles=("How to verify" "Blocked by" "granularity" "Iterate until the user approves" "ready-for-agent") ;;
+                needles=("How to verify" "Blocked by" "granularity" "Iterate until the user approves" "ready-for-agent"
+                         "walking skeleton" "ticket 01" "negative cases" "acceptance criteria" "matt-pocock-workflow:release") ;;
     implement)  headings=("## Gate" "## Build" "## Commit" "## Review" "## Review fixes" "## Definition of done" "## Handover")
                 needles=("Invoke \`tdd\`" "by name" "excluded" "git merge-base" "nothing to review" "Invoke \`code-review\`"
                          "re-run the checks" "verification-before-completion" "candidate SHA"
-                         "**Run it.**" "**Try it.**" "**What changed.**" "**Next.**") ;;
+                         "**Run it.**" "**Try it.**" "**What changed.**" "**Next.**" "stage reached"
+                         "designed, built, integrated, release-ready, deployed, operated") ;;
   esac
   prev=0
   for h in "${headings[@]}"; do
@@ -84,6 +87,30 @@ FIXTURE=$(mktemp -d); mkdir -p "$FIXTURE/skills/to-spec"; echo "a newer upstream
 DRIFT=$(upstream_drift "$FIXTURE"); rm -rf "$FIXTURE"
 [[ $DRIFT == *"WARN: installed to-spec/SKILL.md differs"* ]] || fail "the drift check did not warn on a changed upstream file: $DRIFT"
 [[ $DRIFT == *"note: $FIXTURE/skills/implement/SKILL.md is not installed"* ]] || fail "the drift check did not note a missing upstream file: $DRIFT"
+
+# The release skill (ticket 05): the stages past the merge, in order, and the rules that keep a
+# deploy behind an explicit yes and a verified candidate.
+REL="$PLUGIN/skills/release/SKILL.md"
+[[ -f "$REL" ]] || fail "release skill missing"
+prev=0
+for h in "## Gate" "## Readiness" "## Deploy" "## Verify" "## Operations handover" "## Targets"; do
+  n=$(grep -nxF "$h" "$REL" | head -1 | cut -d: -f1) || fail "release lacks the heading: $h"
+  (( n > prev )) || fail "release: heading out of order: $h"
+  prev=$n
+done
+for needle in "Anything unmet blocks" "the target, the environment and the candidate" "every time" "staged environment" \
+              "running version" "smoke" "abort" "rollback" "runbook" "alert owner" "Stage reached" "no deploy target" \
+              "Web host" "Container or VPS" "Mobile store" "CLI or library registry" "Browser extension store" "Desktop"; do
+  grep -qF -- "$needle" "$REL" || fail "release should say: $needle"
+done
+
+# Foundations (ticket 05): the five production rows, their skip rule, and the new offers.
+FOUND="$PLUGIN/skills/foundations/SKILL.md"
+for needle in "| Deploy target and pipeline |" "| Environments and config |" "| Backups and restore |" \
+              "| Monitoring and alerts |" "| Dependency and secret scanning |" "not applicable" "library" \
+              "runbook" ".env.example" "platform's skill"; do
+  grep -qF -- "$needle" "$FOUND" || fail "foundations should say: $needle"
+done
 
 # The grill's design lens: present, and referenced from the grill.
 [[ -f "$PLUGIN/skills/grill/references/design-lens.md" ]] || fail "design-lens.md missing"

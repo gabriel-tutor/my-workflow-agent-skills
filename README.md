@@ -216,7 +216,7 @@ The senior-engineer layer was tested the same way: `foundations` surveyed a repo
 
 ## Layout
 
-- `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (the SessionStart bootstrap, the gate and the done-check: `seams_gate.py` plus the PreToolUse, PostToolUse, UserPromptSubmit and Stop hooks), `skills/` (bootstrap, `grill` with its design lens, `foundations`, `trivial`, the three flow skills, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
+- `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (the SessionStart bootstrap, the gate and the done-check: `seams_gate.py` plus the PreToolUse, PostToolUse, UserPromptSubmit and Stop hooks), `skills/` (bootstrap, `grill` with its design lens, `foundations`, `trivial`, the three flow skills, `release`, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
 - `.claude-plugin/marketplace.json` — makes this repo a single-plugin marketplace
 - `scripts/install.sh` — the one-command installer; `scripts/behavior_test.py` — the routing-test harness; `scripts/tests/` — the test suites
 - `docs/plugin-behavior-tests.md` — routing-test evidence; `docs/case-study-web-downloader.md` — one feature end to end on a real repo; `docs/carousel/` — the workflow as five slides for sharing

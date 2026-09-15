@@ -1,6 +1,6 @@
 ---
 name: foundations
-description: Use when starting work in a repo for the first time, when the session bootstrap says the repo is not set up, or when a repo lacks run instructions, a test or typecheck command, lint, pre-commit hooks, CI, a glossary, or boundary enforcement
+description: Use when starting work in a repo for the first time, when the session bootstrap says the repo is not set up, or when a repo lacks run instructions, a test or typecheck command, lint, pre-commit hooks, CI, a glossary, boundary enforcement, or the production basics (a deploy pipeline, environments, backups, monitoring, scanning)
 ---
 
 # Foundations
@@ -22,8 +22,13 @@ Look, don't ask. Check each item and note *present*, *missing*, or *partial*, wi
 | Issue tracker config | `docs/agents/issue-tracker.md` (what `to-spec`, `to-tickets`, `code-review` and `triage` read) |
 | Boundary enforcement | dependency rules such as `.dependency-cruiser.*`, or a monorepo tool that enforces package boundaries |
 | Environment and secrets | `.env.example` naming every variable the code reads, and `.env` in `.gitignore` |
+| Deploy target and pipeline | where the code runs (a platform config, a deploy workflow or script, a store or registry manifest) and how a commit gets there |
+| Environments and config | the environments named (staging, production, or the target's tracks), each variable's source per environment, secrets in the platform's store and not in the repo |
+| Backups and restore | for persistent data: scheduled backups, and a restore that has been rehearsed (a runbook line or a script) |
+| Monitoring and alerts | error tracking or logs a person can reach, an alert that reaches a person, a health or version endpoint |
+| Dependency and secret scanning | a dependency audit and a secret scan in CI or pre-commit (`npm audit`, Dependabot or Renovate, gitleaks, `detect-secrets`) |
 
-Skip an item that can't apply (no CI for a scratch script; no boundary rules for a single file).
+Skip an item that can't apply (no CI for a scratch script; no boundary rules for a single file). The five production rows are skipped for a library, a package consumed by other code, or a script that is not deployed anywhere: mark them *not applicable* with the reason, so the report says why rather than leaving them out.
 
 ## 2. Report
 
@@ -37,5 +42,7 @@ Ask with AskUserQuestion which gaps to close now, multi-select, recommended ones
 - Pre-commit hooks → `setup-pre-commit`
 - Boundary enforcement in a TypeScript repo → `setup-ts-deep-modules`
 - Run instructions, verify commands, `.env.example`, a CI workflow → write them yourself, matching the repo's package manager and existing conventions; show each file before writing it
+- Deploy target and pipeline, environments and config, monitoring → the platform's skill when one is installed (for example `vercel:deploy`, `expo:eas-workflows`, `wrangler`); otherwise write the CI or deploy workflow, a per-environment `.env.example` and a runbook skeleton (`docs/runbook.md`: deploy, roll back, restore, who to page) yourself, each shown before writing
+- Backups and restore, dependency and secret scanning → the platform's scheduled backups and a rehearsed restore in the runbook; an audit and a secret scan added to CI or the pre-commit hooks
 
 Anything not chosen stays in the report for another day. Done when every chosen gap is closed and its verify command has been run once with the output shown.

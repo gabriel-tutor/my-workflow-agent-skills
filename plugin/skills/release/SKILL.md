@@ -1,0 +1,74 @@
+---
+name: release
+description: Use when the user says ship, deploy, release, publish or go live, or when an integrated candidate is to reach a host, a store, a registry or a marketplace; takes the candidate through readiness, a deploy behind an explicit yes, verification that the exact candidate runs, and an operations handover
+---
+
+# Release
+
+Take an integrated candidate to its target and prove that exact candidate is what runs. Readiness first; a deploy only after a yes that names what is being deployed where; then verification, then the operations handover. Nothing here deploys, publishes or uploads before the Deploy step's yes.
+
+## Gate
+
+Establish three facts before anything else, from the repo where the repo can answer (facts are not questions):
+
+1. **Candidate.** The exact commit: the SHA the user names, or `git rev-parse HEAD` on the integrated branch with a clean tree. A dirty tree or an unmerged branch is not a candidate; say so and stop until it is.
+2. **Target.** Where the work runs: the user's words, the spec's Release section, or the repo's deploy configuration (a platform config file, a deploy workflow or script, a publish script, a store or marketplace manifest). See the target table below.
+3. **Environment.** The environments the target has (staging, preview, a test track, production) and which one this release is for.
+
+What the repo cannot answer is an unmet row in the readiness table, asked there. Do not ask for what a file already says.
+
+## Readiness
+
+Check every row and report one table: row, ready / unmet / not applicable, and the evidence (the file, the command and its output). **Anything unmet blocks:** no deploy until every row is ready or explicitly not applicable with the reason.
+
+| Row | What counts as ready |
+| --- | --- |
+| Target and environment | named (the gate's facts) and reachable: the platform's CLI or skill is installed and signed in. With no deploy target, this row is unmet: report "no deploy target" and ask for one |
+| Integrated candidate | the SHA is on the base or release branch, `git status --short` is empty, and the candidate is what the review and the definition of done referred to |
+| Suite green on that SHA | the full suite ran on the candidate with its output shown; evidence gathered on the same SHA by `matt-pocock-workflow:implement` is reused, not re-run |
+| Artifact built and identified | built with the repo's own build command and named by version and SHA (image tag, package version, bundle, installer) |
+| Config and variables per environment | every variable the code reads is named per environment (`.env.example`, the platform's config), secrets live in the platform's store, none in the artifact or the repo |
+| Migration and restore | when data changes shape: an expand–contract plan, the migration rehearsed on a copy, and the restore rehearsed; otherwise not applicable |
+| Abort conditions and rollback path | what would make you abort, and the exact command or action that puts the previous version back |
+| Applicable checks | a dependency audit; a secret scan; accessibility for a UI; a load check when the design lens flagged scale; each ready, or not applicable with the reason |
+| Smoke plan | the two or three journeys to run against the deployed candidate, and the version endpoint or marker that identifies what runs |
+
+Then ask with AskUserQuestion, recommended answer first: which unmet rows to close now (each through the skill or command that owns it: `matt-pocock-workflow:foundations` for a missing pipeline, environment config or monitoring; the platform's skill for its setup), or the missing facts (the target, the environment). A yes to closing a row is not a yes to deploying.
+
+## Deploy
+
+1. **The question.** Ask with AskUserQuestion, **every time**: "Deploy candidate `<sha>` to `<target>`, environment `<environment>`?" A yes given earlier, to `implement`, to the readiness question, or as "ship it" or "go all the way", never covers a deploy; the question names the target, the environment and the candidate, and the deploy waits for that yes.
+2. **Staged environment first.** When the target has a staged environment (staging, a preview deployment, an internal or test track, a beta channel, a prerelease tag), deploy there first and run the Verify step against it. Production, or the public listing, gets its own question and its own yes after the staged verification passed.
+3. **Through the platform's own tooling.** Use the platform's skill when one is installed (for example `vercel:deploy`, `expo:eas-app-stores`, `wrangler`), otherwise its CLI. Never a hand-rolled upload when the platform has a CLI.
+4. **Person-only steps** (a store console upload, a review submission, a 2FA or OTP prompt, a signing credential) are handed to the user as exact steps in order, and the release waits for them. Steps that only a person can take are never worked around.
+
+## Verify
+
+Against the environment just deployed, with the output shown:
+
+1. **Running version equals the candidate.** Read the version endpoint, build marker or the platform's deployment SHA and compare the running version with the candidate's SHA or version. "Deployed" means the exact candidate is what runs, not that a deploy command returned 0.
+2. **Smoke journeys.** Run the smoke plan's journeys against the running candidate.
+3. **A short watch.** Watch errors and logs for a few minutes through the platform's logs or dashboard command; note what was seen.
+4. **On any failure, abort.** Execute the rollback path from the readiness table, confirm the previous version is what runs, and report the failure with what was seen. A release is reverted, never "deployed with issues".
+
+## Operations handover
+
+The closing message, in this order:
+
+1. **Monitoring and alert owner.** Where errors and health are watched, and the person an alert reaches.
+2. **Runbook.** Where the runbook is (deploy, roll back, restore, who to page), or the skeleton written for it, shown before writing.
+3. **Follow-ups.** Tickets for anything deferred: an unmet row closed provisionally, a check marked not applicable that should exist, the production deploy still to come.
+4. **Stage reached.** One of the six: designed, built, integrated, release-ready, deployed, operated. Say which environment the candidate is deployed to, or that it stopped at readiness and why.
+
+## Targets
+
+The steps scale to the target. Person-only steps are handed to the user; nothing else changes.
+
+| Target | Staged environment | Artifact | Version check | Rollback | Person-only steps |
+| --- | --- | --- | --- | --- | --- |
+| Web host (Vercel, Netlify, Cloudflare Pages, a PaaS) | preview or staging deployment | the platform's build | the deployment's SHA, or a version endpoint | promote or redeploy the previous deployment | usually none |
+| Container or VPS | a staging host or a canary | an image tagged with version and SHA | `/version` or the image digest on the host | redeploy the previous tag | usually none |
+| Mobile store (App Store, Play) | TestFlight, an internal or closed track | a signed build (EAS, fastlane) | the build number in the store console | halt a phased rollout, or promote the previous build | console upload, review submission, phased-rollout controls |
+| CLI or library registry (npm, PyPI, crates) | a prerelease tag (`next`, an rc) | the packed tarball, wheel or crate | `npm view <pkg> version` or the registry's equivalent | publish a patch; registries do not unpublish | the 2FA or OTP prompt on publish |
+| Browser extension store | an unlisted or test listing | the zipped bundle with its manifest version | the version on the listing and in the browser's extensions page | upload the previous package, or halt the rollout | dashboard upload, review submission |
+| Desktop (Electron, Tauri, native) | a beta channel | signed installers per OS | the app's about or version screen | pull the release and re-point the update feed | notarization and signing credentials, store submissions |
