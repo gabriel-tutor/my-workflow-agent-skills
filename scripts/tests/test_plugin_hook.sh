@@ -23,18 +23,32 @@ Routing details: ${CLAUDE_PLUGIN_ROOT}/skills/using-matt-pocock-skills/reference
 MD
 FIX_REAL=$(cd "$FIX" && pwd -P)
 
-MP_HOME="$TMP/home-mp"; mkdir -p "$MP_HOME/.claude/skills/grilling"; : > "$MP_HOME/.claude/skills/grilling/SKILL.md"
+# The nine skills the bootstrap routes to; a home counts as installed only when every one is there.
+REQUIRED=(grilling domain-modeling tdd diagnosing-bugs code-review codebase-design setup-matt-pocock-skills setup-pre-commit setup-ts-deep-modules)
+# skills <dir> [name...]: SKILL.md files for the named skills (all nine by default) under <dir>.
+skills() { local dir="$1"; shift; local names=("$@"); [[ $# -eq 0 ]] && names=("${REQUIRED[@]}")
+           local n; for n in "${names[@]}"; do mkdir -p "$dir/$n"; : > "$dir/$n/SKILL.md"; done; }
+MP_HOME="$TMP/home-mp"; skills "$MP_HOME/.claude/skills"
+PARTIAL_HOME="$TMP/home-partial"; skills "$PARTIAL_HOME/.claude/skills" grilling    # the 2.x sentinel, alone
 BARE_HOME="$TMP/home-bare"; mkdir -p "$BARE_HOME/.claude/skills"
+CUSTOM_CONFIG="$TMP/custom config dir"; skills "$CUSTOM_CONFIG/skills"                # CLAUDE_CONFIG_DIR, with spaces
+# skills.sh installs each skill as a symlink into its own store; some people link the whole directory.
+MANAGER="$TMP/manager/skills"; skills "$MANAGER"
+LINK_HOME="$TMP/home-links"; mkdir -p "$LINK_HOME/.claude/skills"
+for n in "${REQUIRED[@]}"; do ln -s "$MANAGER/$n" "$LINK_HOME/.claude/skills/$n"; done
+DIRLINK_HOME="$TMP/home-dirlink"; mkdir -p "$DIRLINK_HOME/.claude"; ln -s "$MANAGER" "$DIRLINK_HOME/.claude/skills"
+unset CLAUDE_CONFIG_DIR   # the caller's shell must not decide where the hook looks
 PLAIN="$TMP/plain"; mkdir -p "$PLAIN"
 REPO_UNSET="$TMP/repo-unset"; mkdir -p "$REPO_UNSET/sub/dir"; git -C "$REPO_UNSET" init -q
 REPO_SET="$TMP/repo-set"; mkdir -p "$REPO_SET/docs/agents"; git -C "$REPO_SET" init -q
 : > "$REPO_SET/docs/agents/issue-tracker.md"
 
-# context <plugin-dir> <home> <cwd>: the injected context, or nothing when the hook prints nothing.
+# context <plugin-dir> <home> <cwd> [config-dir]: the injected context, or nothing when the hook
+# prints nothing. The fourth argument, when given, is the session's CLAUDE_CONFIG_DIR.
 context() {
-  local out
-  out=$(HOME="$2" "$1/hooks/session-start" <<< "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$3\"}") \
-    || fail "hook exited non-zero"
+  local out event="{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$3\"}"
+  if [[ $# -ge 4 ]]; then out=$(HOME="$2" CLAUDE_CONFIG_DIR="$4" "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"
+  else out=$(HOME="$2" "$1/hooks/session-start" <<< "$event") || fail "hook exited non-zero"; fi
   [[ -z "$out" ]] && return 0
   python3 -c '
 import json, sys
@@ -63,9 +77,30 @@ C=$(CLAUDE_PLUGIN_ROOT="$ROOT_OVERRIDE" HOME="$MP_HOME" "$FIX/hooks/session-star
 [[ "$C" == *"Routing details: $ROOT_OVERRIDE/skills/using-matt-pocock-skills/references/routing.md"* ]] \
   || fail "CLAUDE_PLUGIN_ROOT not honoured: $C"
 
-# The MP-location line names the installed skills directory, or says MP is not installed.
+# The MP line names the installed skills directory when every required skill is there, and
+# looks where Claude Code does: CLAUDE_CONFIG_DIR when set (spaces and all), else ~/.claude.
 C=$(context "$FIX" "$MP_HOME" "$PLAIN")
 [[ "$C" == *"$MP_HOME/.claude/skills"* && "$C" != *"not installed"* ]] || fail "MP location line wrong for an MP home: $C"
+C=$(context "$FIX" "$BARE_HOME" "$PLAIN" "$CUSTOM_CONFIG")
+[[ "$C" == *"$CUSTOM_CONFIG/skills"* && "$C" != *"not installed"* && "$C" != *"missing"* ]] \
+  || fail "CLAUDE_CONFIG_DIR not honoured for the skills directory: $C"
+
+# A partial install is reported as what it is: the missing names and the install command,
+# never "installed" on the strength of one sentinel file, and never a present name as missing.
+C=$(context "$FIX" "$PARTIAL_HOME" "$PLAIN")
+[[ "$C" == *"missing"* && "$C" == *"tdd"* && "$C" == *"setup-ts-deep-modules"* && "$C" == *"npx skills add mattpocock/skills"* ]] \
+  || fail "partial install not reported with the missing names and the install command: $C"
+[[ "$C" != *"skill files"* ]] || fail "partial install reported as installed: $C"
+[[ "$(grep missing <<< "$C")" != *grilling* ]] || fail "a present skill listed as missing: $C"
+
+# Symlinked skill directories, and a symlinked skills directory, count as installed.
+for H in "$LINK_HOME" "$DIRLINK_HOME"; do
+  C=$(context "$FIX" "$H" "$PLAIN")
+  [[ "$C" == *"$H/.claude/skills"* && "$C" != *"not installed"* && "$C" != *"missing"* ]] \
+    || fail "symlinked skills not accepted (HOME=$H): $C"
+done
+
+# No install at all says so, with the install command.
 C=$(context "$FIX" "$BARE_HOME" "$PLAIN")
 [[ "$C" == *"not installed"* && "$C" == *"npx skills add mattpocock/skills"* ]] || fail "MP not-installed line missing for a bare home: $C"
 
@@ -101,13 +136,17 @@ if [[ ! -r "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md" ]]; then   # r
 fi
 chmod 644 "$UNREADABLE/skills/using-matt-pocock-skills/SKILL.md"   # so the trap can remove it
 
-# Guard: the real bootstrap stays within the 3,000-byte budget with both dynamic lines,
-# in either MP-location variant.
-for H in "$MP_HOME" "$BARE_HOME"; do
-  C=$(context "$REPO/plugin" "$H" "$REPO_UNSET")
+# Guard: the real bootstrap stays within the 3,000-byte budget with both dynamic lines, in
+# every MP-line variant: installed, partial (eight names, the longest), not installed, symlinked,
+# and a custom config directory.
+budget() {   # budget <home> [config-dir]
+  local C N; C=$(context "$REPO/plugin" "$1" "$REPO_UNSET" ${2:+"$2"})
   N=$(printf '%s' "$C" | wc -c | tr -d ' ')
-  (( N <= 3000 )) || fail "injection is $N bytes, over the 3,000-byte budget (HOME=$H)"
-done
+  (( N <= 3000 )) || fail "injection is $N bytes, over the 3,000-byte budget (HOME=$1${2:+ CLAUDE_CONFIG_DIR=$2})"
+  echo "  $N bytes: HOME=$(basename "$1")${2:+ CLAUDE_CONFIG_DIR=$(basename "$2")}"
+}
+for H in "$MP_HOME" "$PARTIAL_HOME" "$BARE_HOME" "$LINK_HOME"; do budget "$H"; done
+budget "$BARE_HOME" "$CUSTOM_CONFIG"
 
 # The bootstrap injects even when the gate module is missing beside the hook (the ledger is
 # skipped, the traceback goes to stderr, the context still comes out).

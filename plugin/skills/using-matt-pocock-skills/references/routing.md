@@ -48,6 +48,10 @@ Mid-phase there is no decision to make: continue, or split the remaining work in
   - `wizard`: a script for the steps only a human can take.
   - `prototype`, `codebase-design`, `domain-modeling`.
 
+## Alongside Superpowers
+
+If Superpowers is also enabled, these win: `grill` over `brainstorming`, `tdd` over `test-driven-development`, `diagnosing-bugs` over `systematic-debugging`, `to-spec`/`to-tickets` over `writing-plans`, `code-review` over `requesting-code-review`. The gate enforces the precedence: a Superpowers skill is not a declaration, so the project stays closed until one of these has been invoked for the request.
+
 ## Precondition
 
 Run `foundations` once per repo. It surveys what a well-run repo has (run and verify commands, lint, pre-commit hooks, CI, glossary, issue-tracker config, boundary rules, `.env.example`), reports the gaps, and offers to close them through `/setup-matt-pocock-skills`, `setup-pre-commit` and `setup-ts-deep-modules`. `to-spec`, `to-tickets`, `code-review` and `triage` read `docs/agents/issue-tracker.md`.

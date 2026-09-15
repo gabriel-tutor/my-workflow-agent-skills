@@ -20,11 +20,11 @@ Matt Pocock's skills lead every development task here. Before your first action 
 
 **Red flags** meaning "invoke the skill now": "the cause is obvious", "it's a quick fix", "the requirements are clear", "let me read the code first".
 
-**Stage owners.** verify = `verification-before-completion`*, before any claim of done, fixed or passing. finish = `finishing-a-development-branch`* on a branch; on the base branch, commit and stop. Worktrees: `using-git-worktrees`*. Review feedback: `receiving-code-review`*. If Superpowers is also enabled, these win: `grill` over `brainstorming`, `tdd` over `test-driven-development`, `diagnosing-bugs` over `systematic-debugging`, `to-spec`/`to-tickets` over `writing-plans`, `code-review` over `requesting-code-review`.
+**Stage owners.** verify = `verification-before-completion`*, before any claim of done, fixed or passing. finish = `finishing-a-development-branch`* on a branch; on the base branch, commit and stop. Worktrees: `using-git-worktrees`*. Review feedback: `receiving-code-review`*.
 
 **Rules.**
 1. Ask the user through AskUserQuestion, recommended answer first. `grill` asks one question per turn.
 2. Test seams are settled in the grill, so `tdd` and `to-spec` do not ask again.
 3. Ceremony scales with the change: trivial work gets no process skill; `code-review` runs on features and builds, is offered on bounded changes and bugs.
 4. Flow order: grill → `to-spec` (several sessions) or `implement`; spec → `to-tickets`; tickets → `implement`, one at a time. Each step asks before it starts.
-5. Keep grill → spec → tickets in one context. Phase boundaries, on-ramps: `${CLAUDE_PLUGIN_ROOT}/skills/using-matt-pocock-skills/references/routing.md`
+5. Keep grill → spec → tickets in one context. Phase boundaries, on-ramps, Superpowers overlaps: `${CLAUDE_PLUGIN_ROOT}/skills/using-matt-pocock-skills/references/routing.md`

@@ -121,6 +121,15 @@ for needle in "behavior" "data" "auth" "migration" "verification-before-completi
   grep -qi "$needle" "$TRIV" || fail "trivial skill should mention: $needle"
 done
 
+# The Superpowers-overlap rule lives in routing.md, not in the bootstrap: ticket 03 moved it there to
+# keep the injection within budget, and the gate enforces the precedence either way.
+ROUTING="$PLUGIN/skills/using-matt-pocock-skills/references/routing.md"
+must_say routing.md "$ROUTING" "If Superpowers is also enabled, these win" "not a declaration"
+grep -qF "If Superpowers is also enabled" "$PLUGIN/skills/using-matt-pocock-skills/SKILL.md" \
+  && fail "the Superpowers-overlap sentence is back in the bootstrap; it belongs in routing.md"
+grep -qF "Superpowers overlaps" "$PLUGIN/skills/using-matt-pocock-skills/SKILL.md" \
+  || fail "the bootstrap should point at routing.md for the Superpowers overlaps"
+
 # The four kept Superpowers skills: present, and matching the checksums recorded in the notices.
 KEPT="using-git-worktrees verification-before-completion finishing-a-development-branch receiving-code-review"
 for s in $KEPT; do [[ -f "$PLUGIN/skills/$s/SKILL.md" ]] || fail "missing copied skill: $s"; done
