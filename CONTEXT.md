@@ -17,7 +17,7 @@ A Skill invocation of a process skill, by Claude or typed by the user, that open
 _Avoid_: unlock, override
 
 **Gate**:
-The hook that refuses any change to the project until the current request has a declaration.
+The hook that refuses any change to the project until the current request has a declaration. In a flow skill, also the question that must get a yes before the skill starts or publishes.
 _Avoid_: guard, blocker, permission
 
 **Ledger**:

@@ -5,7 +5,7 @@ description: Use when a grilled design is agreed and the build will span more th
 
 # To spec
 
-Turn the current conversation into a spec and publish it to the project's issue tracker. No interview: the grill already settled the design, so this is synthesis of what is already known. Do not interview the user; the only questions here are the gate, the seams when none were agreed, and the publish confirmation.
+Turn the current conversation into a spec and publish it to the project's issue tracker. No interview: the grill already settled the design, so this is synthesis of what is already known. Do not interview the user; the only questions here are the gate question, the seams when none were agreed, and the publish confirmation.
 
 ## Gate
 

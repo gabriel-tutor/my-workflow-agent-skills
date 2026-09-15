@@ -11,7 +11,7 @@ Build the work a spec, a ticket or an agreed design describes: tests first at th
 
 Before reading anything, confirm which spec, ticket or agreed design you're building, and where. Offer a worktree through `matt-pocock-workflow:using-git-worktrees`, which asks for consent, or the current branch. Wait for a yes. Skip this only when the user's last message already names both.
 
-Then note the starting point for the review's fixed point: the current branch, its base branch, and `git rev-parse HEAD`.
+Then note the starting point, which the review's fixed point needs: the current branch, its base branch, and `git rev-parse HEAD`.
 
 ## Build
 
@@ -23,12 +23,12 @@ Then note the starting point for the review's fixed point: the current branch, i
 
 1. Stage the ticket's files **by name**: `git add <path> [<path>...]`. Never `git add -A`, `git add .` or `git commit -a`.
 2. Anything else that `git status --short` shows dirty or untracked is **excluded**: list those paths in your reply as excluded, and leave them alone. They are never staged, stashed or committed here.
-3. Commit to the branch the gate settled, with a message that says what changed and why, and names the ticket. If a pre-commit hook rewrites a staged file, re-stage that file by name and commit again; never `--no-verify`.
+3. Commit to the branch settled above, with a message that says what changed and why, and names the ticket. If a pre-commit hook rewrites a staged file, re-stage that file by name and commit again; never `--no-verify`.
 4. HEAD is now the **candidate**: note `git rev-parse --short HEAD`.
 
 ## Review
 
-1. **Fixed point.** On a branch, the merge-base with its base branch: `git merge-base <base> HEAD`. On the base branch itself, the commit HEAD was at when the gate closed (`git merge-base` would return HEAD). The candidate is HEAD; do not change it while the review runs.
+1. **Fixed point.** On a branch, the merge-base with its base branch: `git merge-base <base> HEAD`. On the base branch itself, the starting commit noted at the beginning (`git merge-base` would return HEAD there). The candidate is HEAD; do not change it while the review runs.
 2. **Empty diff.** Run `git diff --stat <fixed-point>...HEAD` first. If it prints nothing, there is nothing to review: report that, say why (nothing committed yet, or the fixed point is HEAD), and fix that before going on. Never run the review on an empty diff.
 3. `code-review` reads `docs/agents/issue-tracker.md`; if the repo has none, offer `matt-pocock-workflow:foundations` before the review.
 4. Invoke `code-review` (Matt Pocock's, bare name) with the Skill tool, passing the fixed point. It diffs `<fixed-point>...HEAD` and reviews along its two axes, Standards and Spec.
@@ -53,7 +53,7 @@ Before claiming the work is done, run `matt-pocock-workflow:verification-before-
 | Docs | updated where behavior changed: the README's run or usage lines, the glossary if a term moved |
 | Commit message | says what changed and why, and names the ticket |
 
-Anything unmet is not done: fix it, or say plainly that it's unmet and why. Then record the outcome on the ticket through the tracker workflow: criteria ticked, status done, a note naming the candidate SHA. With a local-markdown tracker that is an edit to the ticket file, committed by name.
+Anything unmet is not done: fix it, or say plainly that it's unmet and why.
 
 ## Handover
 
@@ -62,6 +62,6 @@ Your closing message is the handover. It has exactly four sections under these f
 1. **Run it.** The exact commands to start and to check the work, taken from the repo's real scripts or README. If the repo has no run or verify command, give the one-line command that works and offer to add it to the README.
 2. **Try it.** One short walkthrough per acceptance criterion, in the user's words: what to do, and what they should see. Refer to things by their glossary names.
 3. **What changed.** The candidate SHA, the files and public interfaces touched, in a few lines, and any decision you made that the ticket didn't settle.
-4. **Next.** Name the next unblocked ticket, or say there is none. Then say one of two things: `/clear` before it, because it is unrelated to this one or this session is already heavy; or continue in this session, because it builds on this one. If the work is on a branch, also offer `matt-pocock-workflow:finishing-a-development-branch`. A handover that stops at "What changed" is incomplete.
+4. **Next.** Name the next unblocked ticket, or say there is none. Then say one of two things: `/clear` before it, because it is unrelated to this one or this session is already heavy; or continue in this session, because it builds on this one. If the candidate is on a branch, also offer `matt-pocock-workflow:finishing-a-development-branch`. A handover that stops at "What changed" is incomplete.
 
 Adapted from Matt Pocock's `implement` skill (github.com/mattpocock/skills, `skills/engineering/implement` at commit `3cca18b368ae95cdbdebbff572ccafa662551015`), MIT License, Copyright (c) 2026 Matt Pocock; the full notice is in this plugin's `THIRD_PARTY_NOTICES.md`.
