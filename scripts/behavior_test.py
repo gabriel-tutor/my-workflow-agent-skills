@@ -450,37 +450,59 @@ def judge_run(record: dict, expect: dict) -> "tuple[str, str]":
     return "match", ""
 
 
-def judge_records(records: list) -> "tuple[bool, str]":
-    """Every scenario in `records` against its expectation file. True when each one has
-    every run matching; the report names each shortfall, misses and errors apart."""
+def outcomes_by_scenario(records: list) -> list:
+    """The records grouped by scenario, each judged against its expectation file: a list of
+    (scenario, expect, outcomes, tally), `expect` None when the scenario has no expectation
+    file (then `outcomes` and `tally` are empty), `outcomes` the (record, kind, why) triples
+    from `judge_run`, and `tally` the counts a report needs: runs, matched, misses, errors,
+    refused (runs with a refusal) and failed (failed calls)."""
     by_scenario: dict = {}
     for r in records:
         by_scenario.setdefault(r.get("scenario"), []).append(r)
-    lines, ok = [], True
+    grouped = []
     for scenario, runs in by_scenario.items():
         expect = expectation(scenario or "")
+        if expect is None:
+            grouped.append((scenario, None, [], {"runs": len(runs)}))
+            continue
+        outcomes = [(r, *judge_run(r, expect)) for r in runs]
+        tally = {"runs": len(runs),
+                 "matched": sum(1 for _, kind, _ in outcomes if kind == "match"),
+                 "misses": sum(1 for _, kind, _ in outcomes if kind == "miss"),
+                 "errors": sum(1 for _, kind, _ in outcomes if kind == "error"),
+                 "refused": sum(1 for r in runs if r.get("refusals")),
+                 "failed": sum(r.get("failed_calls") or 0 for r in runs)}
+        grouped.append((scenario, expect, outcomes, tally))
+    return grouped
+
+
+def judge_records(records: list) -> "tuple[bool, str]":
+    """Every scenario in `records` against its expectation file. True when each one has
+    every run matching; the report names each shortfall, misses and errors apart."""
+    lines, ok = [], True
+    for scenario, expect, outcomes, tally in outcomes_by_scenario(records):
         if expect is None:
             lines.append(f"== {scenario}: no expectation file (tests/scenarios/{scenario}/expect.json)")
             ok = False
             continue
-        outcomes = [(r, *judge_run(r, expect)) for r in runs]
-        matched = sum(1 for _, kind, _ in outcomes if kind == "match")
-        misses = sum(1 for _, kind, _ in outcomes if kind == "miss")
-        errors = sum(1 for _, kind, _ in outcomes if kind == "error")
-        refused = sum(1 for r in runs if r.get("refusals"))
         policy = "a refusal allowed" if expect["refusal"] else "no refusal"
         lines.append(f"== {scenario}: expected first skill {' or '.join(expect['skill'])}, {policy}; "
-                     f"{matched} of {len(runs)} runs matched; refusals in {refused} of {len(runs)}")
+                     f"{tally['matched']} of {tally['runs']} runs matched; refusals in {tally['refused']} of {tally['runs']}")
         for r, kind, why in outcomes:
             if kind != "match":
                 lines.append(f"   {kind:6} run {r.get('run')}: {why}")
-        if matched < len(runs):
+        if tally["matched"] < tally["runs"]:
             ok = False
-            lines.append(f"FAIL: {scenario} short by {len(runs) - matched} "
-                         f"({_plural(misses, 'miss')}, {_plural(errors, 'error')})")
+            lines.append(f"FAIL: {scenario} short by {tally['runs'] - tally['matched']} "
+                         f"({_plural(tally['misses'], 'miss')}, {_plural(tally['errors'], 'error')})")
         else:
-            lines.append(f"PASS: {scenario} {matched} of {len(runs)}")
+            lines.append(f"PASS: {scenario} {tally['matched']} of {tally['runs']}")
     return ok, "\n".join(lines)
+
+
+def _named(items: "list[str]") -> str:
+    """Each item in backticks, comma-separated; `unknown` when there are none."""
+    return ", ".join(f"`{item}`" for item in items) or "unknown"
 
 
 def report_records(records: list) -> "tuple[bool, str]":
@@ -489,30 +511,20 @@ def report_records(records: list) -> "tuple[bool, str]":
     runs with a refusal, failed calls, errors), the runs that did not match listed under it
     with the judge's reason, and the candidates and models the records name. False when a
     scenario has no expectation file."""
-    by_scenario: dict = {}
-    for r in records:
-        by_scenario.setdefault(r.get("scenario"), []).append(r)
     candidates = sorted({r.get("candidate") for r in records if r.get("candidate")})
     models = sorted({r.get("model") for r in records if r.get("model")})
-    named = lambda items: ", ".join(f"`{i}`" for i in items) or "unknown"  # noqa: E731
-    lines = [f"Candidate: {named(candidates)}; model: {named(models)}; {_plural(len(records), 'run')}.", "",
+    lines = [f"Candidate: {_named(candidates)}; model: {_named(models)}; {_plural(len(records), 'run')}.", "",
              "| Scenario | Expected first skill | Runs | Matched | Refused | Failed calls | Errors |",
              "| --- | --- | --- | --- | --- | --- | --- |"]
     notes, ok = [], True
-    for scenario, runs in by_scenario.items():
-        expect = expectation(scenario or "")
+    for scenario, expect, outcomes, tally in outcomes_by_scenario(records):
         if expect is None:
             lines.append(f"| `{scenario}` | no expectation file (tests/scenarios/{scenario}/expect.json) "
-                         f"| {len(runs)} | | | | |")
+                         f"| {tally['runs']} | | | | |")
             ok = False
             continue
-        outcomes = [(r, *judge_run(r, expect)) for r in runs]
-        matched = sum(1 for _, kind, _ in outcomes if kind == "match")
-        errors = sum(1 for _, kind, _ in outcomes if kind == "error")
-        refused = sum(1 for r in runs if r.get("refusals"))
-        failed = sum(r.get("failed_calls") or 0 for r in runs)
-        lines.append(f"| `{scenario}` | {' or '.join(f'`{s}`' for s in expect['skill'])} | {len(runs)} "
-                     f"| {matched} | {refused} | {failed} | {errors} |")
+        lines.append(f"| `{scenario}` | {' or '.join(f'`{s}`' for s in expect['skill'])} | {tally['runs']} "
+                     f"| {tally['matched']} | {tally['refused']} | {tally['failed']} | {tally['errors']} |")
         notes += [f"- `{scenario}` run {r.get('run')}: {kind}, {why}" for r, kind, why in outcomes if kind != "match"]
     if notes:
         lines += ["", "Runs that did not match:", ""] + notes

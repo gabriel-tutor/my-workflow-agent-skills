@@ -31,8 +31,17 @@ claude plugin validate --strict "$REPO" >/dev/null || fail "marketplace manifest
 
 # One version everywhere (ticket 10): the two manifests, the README's version badge and the
 # CHANGELOG's first entry name the same release, so a bump cannot land in one place only.
-V_PLUGIN=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$PLUGIN/.claude-plugin/plugin.json")
-V_MARKET=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["plugins"][0]["version"])' "$REPO/.claude-plugin/marketplace.json")
+json_field() {   # $1 = a JSON file, $2 = a dotted path into it (a number selects a list item)
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    value = value[int(key)] if isinstance(value, list) else value[key]
+print(value)
+PY
+}
+V_PLUGIN=$(json_field "$PLUGIN/.claude-plugin/plugin.json" version)
+V_MARKET=$(json_field "$REPO/.claude-plugin/marketplace.json" plugins.0.version)
 V_README=$(grep -oE 'badge/plugin-[0-9]+\.[0-9]+\.[0-9]+' "$REPO/README.md" | head -1 | cut -d- -f2)
 V_CHANGELOG=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO/CHANGELOG.md" | cut -d' ' -f2)
 [[ -n $V_PLUGIN && $V_PLUGIN == "$V_MARKET" && $V_PLUGIN == "$V_README" && $V_PLUGIN == "$V_CHANGELOG" ]] \

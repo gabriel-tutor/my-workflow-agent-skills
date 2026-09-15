@@ -6,7 +6,7 @@ The plugin under test is this repository at the commit that last changed this fi
 
 ## Observed on the developer's machine
 
-2026-09-16. Every suite `scripts/test.sh` can run there ran and passed (9 of 9 on the 3.0.0 candidates; the exact counts are in the ticket records under `.scratch/seams-3/issues/`), and the 3.0.0 evidence set of headless runs was made there ([plugin-behavior-tests.md](plugin-behavior-tests.md), its last section).
+2026-09-16. Every suite `scripts/test.sh` can run there ran and passed, 9 of 9, on `0600f81`, the commit that set the version to 3.0.0 and the candidate the 3.0.0 evidence set of headless runs was made on ([plugin-behavior-tests.md](plugin-behavior-tests.md), its last section); the later 3.0.0 commits change documentation and the harness only, and each ticket record under `.scratch/seams-3/issues/` names the SHA its own suite run was made on.
 
 | Field | Value |
 | --- | --- |

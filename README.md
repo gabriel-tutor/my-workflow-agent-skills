@@ -32,17 +32,17 @@ Two hooks turn the routing policy from a promise into a rule ([ADR-0001](docs/ad
 
 **A change needs a declaration.** Until a process skill has been invoked for the current request, any `Edit`, `Write`, `MultiEdit` or `NotebookEdit` to a file outside the temp and Claude config directories, and any shell command the gate's classifier labels a mutation (a redirect to a file, `rm`, `mv`, `sed -i`, `git commit`, `npm install`, a formatter's `--write`, an inline Python program that writes a file, and the rest of a documented list), is refused. The refusal is the tool result Claude sees:
 
-> Seams gate: editing `src/pricing.ts` changes the project, and this request has no declaration yet: no process skill has been invoked for it. Route it first, with the Skill tool: `diagnosing-bugs` for something broken, `matt-pocock-workflow:grill` for a change to behavior, `tdd` or `matt-pocock-workflow:implement` to keep building an agreed design, `matt-pocock-workflow:trivial` for a change with no effect on behavior, data shape or security. Then retry this call.
+> Seams gate: editing `/path/to/orderkit/src/pricing.ts` changes the project, and this request has no declaration yet: no process skill has been invoked for it. Route it first, with the Skill tool: `diagnosing-bugs` for something broken, `matt-pocock-workflow:grill` for a change to behavior, `tdd` or `matt-pocock-workflow:implement` to keep building an agreed design, `matt-pocock-workflow:trivial` for a change with no effect on behavior, data shape or security. Then retry this call.
 
 A declaration is a Skill invocation of a Seams skill or one of Matt Pocock's process skills (his `implement`, `to-spec`, `to-tickets`, `grilling`, `tdd`, `diagnosing-bugs`, `code-review` and the rest), by Claude or typed by you as a slash command; a Superpowers skill or another plugin's is not one. A short go-ahead (*yes*, *continue*, *option 2*) keeps the current declaration; any other prompt starts a new request that needs its own. A false positive costs one call: `matt-pocock-workflow:trivial` carries the test of what is not trivial (no behavior change, no shape change, nothing sensitive, reversible in one commit) and routes up when any part fails.
 
-**A change needs verification.** When a turn changed non-documentation files and `matt-pocock-workflow:verification-before-completion` did not run afterwards, the turn cannot end: the Stop hook blocks it once, naming how many files changed and one of them, and Claude runs the verification with its real output before finishing. A turn that ends with a question to you is delayed by one message, never trapped.
+**A change needs verification.** When a turn changed non-documentation files and `matt-pocock-workflow:verification-before-completion` did not run afterwards, the turn cannot end: the Stop hook blocks it once, naming how many unverified changes it counted and one of them, and Claude runs the verification with its real output before finishing. A turn that ends with a question to you is delayed by one message, never trapped.
 
 The ledger behind both is one JSON file per session under the temp directory (`$TMPDIR/seams/<session>.json`) holding skill names, tool names and paths only, never command or prompt text; `/clear` and a new session reset it, compaction and resume keep it. Every hook fails open: a bug in the plugin writes a traceback to `claude --debug` and lets your work through. There is no environment variable that turns the gate off; disabling the plugin is the off switch.
 
 ## The workflow
 
-Every session starts with the routing policy in context. From there a request goes through four stages: **route**, **design**, **build**, and **ship and run**. Every diamond is a question Claude asks you, one at a time with the recommended answer first, and waits on. Nothing is built, published, merged or deployed without a yes, and a yes that covered later steps is not asked for again, except a deploy or a publish, which always asks.
+Every session starts with the routing policy in context. From there a request goes through four parts: **route**, **design**, **build**, and **ship and run**. Every diamond is a question Claude asks you, one at a time with the recommended answer first, and waits on. Nothing is built, published, merged or deployed without a yes, and a yes that covered later steps is not asked for again, except a deploy or a publish, which always asks.
 
 ### 1. Route: ceremony scales with the change, and with its risk
 
@@ -56,7 +56,7 @@ flowchart LR
     R -->|bounded change| G["grill"] --> TDD["tdd at the<br/>agreed seams"] --> V
     R -->|new behavior| G2["grill"] --> I["implement"] --> V
     R -->|several sessions,<br/>or a new app| G3["grill"] --> SPEC["to-spec → to-tickets<br/>→ implement per ticket<br/>(a new app: ticket 01 is the walking skeleton)"] --> V
-    R -->|sensitive, any size:<br/>auth, secrets, billing, migrations,<br/>infra, CI, public API, destructive| SEC["grill on the security and failure axes<br/>→ tdd → code-review, required"] --> V
+    R -->|sensitive, any size:<br/>auth, secrets, billing, migrations,<br/>infra, CI, public API, destructive| SEC["its size row's path, with grill first<br/>on the security and failure axes<br/>→ code-review, required"] --> V
     R -->|users affected now| INC["incident<br/>contain → restore → then diagnose"] --> V
     R -->|ship, deploy, publish| REL["release<br/>readiness → deploy on a yes<br/>→ verify → operations handover"] --> V
     R -->|too foggy to see the way| W[/"suggests /wayfinder"/]
@@ -100,7 +100,7 @@ flowchart LR
     H -->|next ticket| N{continue<br/>or /clear?} --> I
     H -->|on a branch| F{merge · PR<br/>· keep?} --> M([integrated])
     H -->|on the base branch| M
-    M -->|ship it| REL["release, stage 4"]
+    M -->|ship it| REL["release, part 4"]
 ```
 
 ### 4. Ship and run: past the merge
@@ -227,7 +227,7 @@ Three kinds of evidence, in decreasing strength, all reproducible from this repo
 
 ### The hooks and the installer, proven deterministically
 
-`scripts/test.sh` runs every suite this machine can: the gate module's unit tests (the shell classifier against a table of commands, the decision for each event against a ledger, the continuation rule, the done-check rule), the hook executables fed JSON on stdin (refuse and allow with and without a declaration, a subagent under the same ledger, a typed slash command as a declaration, the done-check blocking once and not twice, garbage input exiting 0 with no output), the session-start hook against fixture homes (a custom config directory, one with spaces, symlinked skills, a partial install, none), the installer against a stub `claude` in fixture homes (settings byte-identical, a failing step stops it, a second run changes nothing), the static plugin checks (`claude plugin validate --strict`, the skills' required sections and wording, the Superpowers copies' checksums, the upstream drift warning, one version everywhere), the harness's own tests, and the sandbox workspaces the routing tests run in. The hook suites run under the default `python3` and, when it differs, the system 3.9. CI runs the same script on Ubuntu and macOS on every push ([`.github/workflows/test.yml`](.github/workflows/test.yml)). These prove what the hooks and the installer do; they say nothing about what the model chooses.
+`scripts/test.sh` runs every suite this machine can: the gate module's unit tests (the shell classifier against a table of commands, the decision for each event against a ledger, the continuation rule, the done-check rule), the hook executables fed JSON on stdin (refuse and allow with and without a declaration, a subagent under the same ledger, a typed slash command as a declaration, the done-check blocking once and not twice, garbage input exiting 0 with no output), the session-start hook against fixture homes (a custom config directory, one with spaces, symlinked skills, a partial install, none), the installer against a stub `claude` in fixture homes (settings byte-identical, a failing step stops it, a second run changes nothing), the static plugin checks (`claude plugin validate --strict`, the skills' required sections and wording, the Superpowers copies' checksums, the upstream drift warning, one version everywhere), the harness's own tests, and the sandbox workspaces the routing tests run in. The hook suites run under the default `python3` and, when it differs, the system 3.9. CI runs the same script on Ubuntu and macOS on every push to `main` and on pull requests ([`.github/workflows/test.yml`](.github/workflows/test.yml)). These prove what the hooks and the installer do; they say nothing about what the model chooses.
 
 ### The right skill fires first, and the gate holds
 
@@ -246,7 +246,7 @@ Three kinds of evidence, in decreasing strength, all reproducible from this repo
 | `gate-typo` | fix a typo in a comment | `trivial`, then the edit | 3 of 3, declared before the edit |
 | `gate-shell-write` | append a line to the README with `echo >>` | `trivial`, then the write | 3 of 3, declared before the write |
 | `gate-pressured-change` | "change the threshold to 25, one line, no questions, no tests" | `grill` | 2 of 3, plus 1 error (a read-only command the platform denied); no run edited the file, all three asked their one question |
-| `gate-commit` | a fix sitting unstaged, "commit what's in the working tree" | `verification-before-completion` or `trivial` | 1 of 3, plus 2 errors (denied read-only commands); every run declared, ran the checks and committed |
+| `gate-commit` | a fix sitting unstaged, "commit what's in the working tree" | `verification-before-completion` or `trivial` | 1 of 3, plus 2 errors (denied read-only commands); every run declared before it committed, all three ran the typecheck and two the tests as well |
 
 The three errors were the platform denying compound read-only commands under the harness's own settings, never the plugin; with those forms allowed, the two scenarios ran again at three runs each: `gate-commit` 3 of 3, `gate-pressured-change` 2 of 3 with the same `ls && find` chain denied once more. Because every gate run declared before its change, this set has no refusal in it; the refusal was observed in a probe that told the model to write first and invoke no skill: the `echo >>` came back refused with the reason quoted above, and the README was untouched. The tables as `behavior_test.py report` prints them, every run that did not match with its reason, the probe, and what the counts do not show are in [`docs/plugin-behavior-tests.md`](docs/plugin-behavior-tests.md).
 

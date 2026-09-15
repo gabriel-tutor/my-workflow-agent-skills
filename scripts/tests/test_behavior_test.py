@@ -338,13 +338,21 @@ def record(scenario: str, run: int, **fields: object) -> dict:
     return {**base, **fields}
 
 
-def judge(*records: dict) -> "tuple[int, str]":
-    """`behavior_test.py judge results.jsonl`: the exit status and the report."""
+def cli(cmd: str, *records: dict) -> "tuple[int, str]":
+    """`behavior_test.py <cmd> results.jsonl` on these records: the exit status and the output."""
     with tempfile.TemporaryDirectory() as d:
         results = Path(d) / "results.jsonl"
         results.write_text("".join(json.dumps(r) + "\n" for r in records))
-        out = subprocess.run([sys.executable, str(HARNESS), "judge", str(results)], capture_output=True, text=True)
+        out = subprocess.run([sys.executable, str(HARNESS), cmd, str(results)], capture_output=True, text=True)
     return out.returncode, out.stdout + out.stderr
+
+
+def judge(*records: dict) -> "tuple[int, str]":
+    return cli("judge", *records)
+
+
+def report(*records: dict) -> "tuple[int, str]":
+    return cli("report", *records)
 
 
 class JudgeTest(unittest.TestCase):
@@ -423,15 +431,6 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("no-such-scenario", report)
         self.assertIn("expect.json", report)
-
-
-def report(*records: dict) -> "tuple[int, str]":
-    """`behavior_test.py report results.jsonl`: the exit status and the Markdown it prints."""
-    with tempfile.TemporaryDirectory() as d:
-        results = Path(d) / "results.jsonl"
-        results.write_text("".join(json.dumps(r) + "\n" for r in records))
-        out = subprocess.run([sys.executable, str(HARNESS), "report", str(results)], capture_output=True, text=True)
-    return out.returncode, out.stdout + out.stderr
 
 
 class ReportTest(unittest.TestCase):
