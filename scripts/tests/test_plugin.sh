@@ -109,6 +109,24 @@ must_say foundations "$PLUGIN/skills/foundations/SKILL.md" "| Deploy target and 
   "| Backups and restore |" "| Monitoring and alerts |" "| Dependency and secret scanning |" "not applicable" \
   "published nowhere" "runbook" ".env.example" "platform's skill"
 
+# The incident skill (ticket 06): contain and restore before diagnosis, the seven steps in order,
+# every outward action behind a yes, the cause through diagnosing-bugs, the fix on the normal
+# route with its regression test first, the note under docs/incidents/, the stage in the handover.
+INC="$PLUGIN/skills/incident/SKILL.md"
+[[ -f "$INC" ]] || fail "incident skill missing"
+headings_in_order incident "$INC" "## Impact" "## Contain" "## Restore and confirm" "## Diagnose" "## Fix" "## Post-mortem" "## Handover"
+must_say incident "$INC" "Who is affected" "Since when" "What changed last" "safest reversible action" \
+  "Ask before any outward action" "wait for the yes" "no longer affected" "Invoke \`diagnosing-bugs\`" \
+  "normal route" "regression test first" "docs/incidents/" "follow-up ticket" "Stage reached" \
+  "designed, built, integrated, release-ready, deployed, operated"
+
+# The grill (ticket 06): a decision the code or an earlier answer already settles is not a question,
+# and the rule sits in the Presentation section, where the facts-then-one-question format is.
+GRILL="$PLUGIN/skills/grill/SKILL.md"
+awk '/^## Presentation$/{p=1; next} /^## /{p=0} p' "$GRILL" | grep -qF "already settles is not a question" \
+  || fail "grill's Presentation section lacks the settled-is-not-a-question rule"
+grep -qF "goes in the facts" "$GRILL" || fail "grill should say where a settled decision goes: the facts"
+
 # The grill's design lens: present, and referenced from the grill.
 [[ -f "$PLUGIN/skills/grill/references/design-lens.md" ]] || fail "design-lens.md missing"
 grep -q "references/design-lens.md" "$PLUGIN/skills/grill/SKILL.md" || fail "grill does not reference the design lens"

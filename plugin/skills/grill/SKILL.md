@@ -25,7 +25,7 @@ This replaces grilling's round format. Each of your turns has exactly two parts,
 1. **Facts:** the facts from the code or docs that this question depends on, in a few lines. If it helps, add how many decisions remain after this one, as a number ("3 more decisions after this one").
 2. **One question:** ask it with the AskUserQuestion tool, offering 2–4 options. Put your recommended answer first and end its label with "(Recommended)". Free-text answers arrive through "Other". If AskUserQuestion isn't available, write the same question in text: the question, its options as a short list, and your recommendation. Then end your turn.
 
-The rest of the frontier stays in your design tree until its turn; the count in the facts is all the user sees of it. Take each question from the frontier in dependency order. For anything that will be built, one frontier question is which seams the tests go at, because Matt Pocock's `tdd` tests only at agreed seams.
+The rest of the frontier stays in your design tree until its turn; the count in the facts is all the user sees of it. Take each question from the frontier in dependency order. A decision the code or an earlier answer already settles is not a question; the fact goes in the facts section, and the frontier moves on. For anything that will be built, one frontier question is which seams the tests go at, because Matt Pocock's `tdd` tests only at agreed seams.
 
 ## Coverage
 

@@ -61,6 +61,14 @@ _Avoid_: scaffold, boilerplate, MVP
 An outage or degradation that users feel now. Contain and restore come before diagnosis.
 _Avoid_: bug, hotfix, emergency
 
+**Post-mortem note**:
+The record of an incident under `docs/incidents/`: timeline, impact, cause, what stopped it, what prevents it, and the follow-up tickets.
+_Avoid_: RCA, incident report
+
+**Incident handover**:
+The closing message of an incident: the service now, what changed, the fix's stage, next and its owner.
+_Avoid_: summary, wrap-up
+
 **Release**:
 Taking a candidate to the deployment target and proving that exact candidate is what runs.
 _Avoid_: deploy (one step of it), ship, launch
