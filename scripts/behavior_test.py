@@ -1,27 +1,47 @@
 #!/usr/bin/env python3
-"""Headless behavior tests for the matt-pocock-workflow plugin (spec section 7).
+"""Headless routing probe for the matt-pocock-workflow plugin (spec: Testing Decisions, 5).
 
-A run's verdict is its first committing call: a Skill or AskUserQuestion call (a process
-choice) or an Edit/Write inside the run's workspace (straight to code). Everything before it
-is exploration, including writes outside the workspace (a throwaway script in /tmp).
+It measures which route a fresh session takes, not whether the work it then does is right:
+a run's verdict is its first committing call, a Skill or AskUserQuestion call (a process
+choice) or a change to the run's workspace (straight to code: an Edit/Write there, or a shell
+command the gate's own classifier labels a mutation). Everything before it is exploration,
+including writes outside the workspace (a throwaway script in /tmp). A committing call is
+confirmed by its result: a call the gate refused, or a change that failed, changed nothing,
+so it is counted (`refusals`, `failed_calls`) and the scan goes on.
 
-  behavior_test.py run --scenario S --arm plugin|control [--runs 5] [--jobs 5] [--past-skill]
-                       [--superpowers] [--prompt TEXT] [--label NAME] [--timeout 300] [--out DIR]
+  behavior_test.py run --scenario S [--scenario T | --scenario all] --arm plugin|control
+                       [--runs N] [--jobs 5] [--past-skill] [--superpowers] [--prompt TEXT]
+                       [--label NAME] [--timeout 300] [--out DIR] [--assert]
       Runs `claude -p` in fresh fixture workspaces (scripts/prepare_run.sh S), with --settings
-      allowing reads of Matt Pocock's skill files and disabling Superpowers (--superpowers
-      keeps the user's own Superpowers setting instead), adding --plugin-dir plugin for the
-      plugin arm. Each run stops at its first committing call, at the end of the reply, or at
-      the timeout. Keeps every raw stream, appends one record per run to <out>/results.jsonl,
-      prints a summary. The prompt defaults to tests/scenarios/S/prompt.md.
+      allowing reads of Matt Pocock's skill files, the fixture's checks and a commit in the
+      workspace, and disabling Superpowers (--superpowers keeps the user's own setting),
+      adding --plugin-dir plugin for the plugin arm. Each run ends at its confirmed verdict,
+      at the end of the reply, or at the timeout. Keeps every raw stream, appends one record
+      per run to <out>/results.jsonl, prints a summary. The prompt, the run count and
+      --past-skill default to tests/scenarios/S/{prompt.md,expect.json}.
+      --assert judges every run against expect.json (the first skill expected; `refusal`,
+      whether a gate refusal is allowed) and exits 1 when any run is short, naming each miss
+      and, apart from them, each run that was not a run at all: a timeout, a process that
+      exited without a result, an error result, a reply with no tokens, a permission denial by
+      the harness's own settings.
+
+  behavior_test.py judge RESULTS.jsonl [...]
+      The same judgement on saved records.
 
   behavior_test.py scan [--past-skill] [--workspace DIR] STREAM
       Prints the record for a saved stream-json file.
 
 With --past-skill, Skill calls are recorded (in order, as `skills`) but do not stop the run,
-so a test can see what the skill does next: for the grill, its first question. Headless runs
-have no AskUserQuestion, so that question arrives as the reply; `text_questions` counts the
-question marks in it. `superpowers_skills` counts the superpowers: skills the run loaded.
+so a test can see what the skill does next: for the grill, its first question; for a gate
+scenario, whether the change goes through once the route is declared. Headless runs have no
+AskUserQuestion, so a question arrives as the reply; `text_questions` counts the question
+marks in it, a formatting heuristic and not a count of decisions asked. `superpowers_skills`
+counts the superpowers: skills the run loaded. `unguarded` counts changes that went through
+before any declaration (the gate's invariant, measured live); `denials` is the platform's own
+count of permission denials and is unknown (null) when a run was stopped before its result.
 """
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -34,36 +54,69 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional
 
 REPO = Path(__file__).resolve().parent.parent
 PLUGIN = REPO / "plugin"
 PREPARE = REPO / "scripts" / "prepare_run.sh"
 SCENARIOS = REPO / "tests" / "scenarios"
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-STOP_TOOLS = {"Skill", "AskUserQuestion"} | EDIT_TOOLS
+STOP_TOOLS = {"Skill", "AskUserQuestion", "Bash"} | EDIT_TOOLS
+
+sys.dont_write_bytecode = True                 # no __pycache__ in the plugin directory
+sys.path.insert(0, str(PLUGIN / "hooks"))
+import seams_gate as gate  # noqa: E402  (the gate's classifier: a shell write scores as the gate scores it)
 
 
 def settings(superpowers: bool) -> str:
     """--settings for a run. Read access to Matt Pocock's skill files (the entries in
     ~/.claude/skills are symlinks, and permission checks use the resolved ~/.skills-manager
     path) and to the plugin's own reference files; a leading // makes a Read rule absolute.
-    Superpowers is forced off unless the run keeps the user's own setting."""
-    allow = ["Read(~/.claude/skills/**)", "Read(~/.skills-manager/**)", f"Read(/{PLUGIN}/**)"]
+    The fixture's own checks and a commit are allowed so a gate scenario can run to its end in
+    the throwaway workspace; anything else the model runs is the platform's call to deny, and
+    a denial makes the run an error, not a miss. Superpowers is forced off unless the run
+    keeps the user's own setting."""
+    allow = ["Read(~/.claude/skills/**)", "Read(~/.skills-manager/**)", f"Read(/{PLUGIN}/**)",
+             "Bash(npm test:*)", "Bash(npm run typecheck:*)", "Bash(npx vitest:*)", "Bash(npx tsc:*)",
+             "Bash(git add:*)", "Bash(git commit:*)"]
     config: dict = {"permissions": {"allow": allow}}
     if not superpowers:
         config["enabledPlugins"] = {"superpowers@claude-plugins-official": False}
     return json.dumps(config)
 
 
-class Scanner:
-    """Follows one run's stream-json events up to its first committing call."""
+def _result_text(block: dict) -> str:
+    """A tool_result's text, whether it came as a string or as content blocks."""
+    content = block.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(b.get("text") or "" for b in content if isinstance(b, dict))
+    return ""
 
-    def __init__(self, past_skill: bool = False, workspace: Path | None = None):
+
+class Scanner:
+    """Follows one run's stream-json events up to its first committing call.
+
+    A committing call is taken as the verdict when it is made and confirmed by its result: a
+    call the gate refused (an error result whose reason starts with the gate's prefix) or a
+    change that failed did not change anything, so it is counted and the scan goes on. A
+    stream that ends before the result leaves the verdict as made.
+    """
+
+    def __init__(self, past_skill: bool = False, workspace: Optional[Path] = None):
         self.past_skill = past_skill
         self.workspace = workspace.resolve() if workspace else None
-        self.record = {"model": None, "superpowers_skills": None, "first_tool": None,
-                       "skill": None, "skills": [], "questions": None, "before": [], "text": "",
-                       "result": None, "text_questions": None, "cost_usd": None}
+        self.record = {"model": None, "superpowers_skills": None, "first_tool": None, "label": None,
+                       "skill": None, "skills": [], "skill_failed": None, "questions": None,
+                       "before": [], "refusals": 0, "late_refusals": 0, "failed_calls": 0, "denials": None,
+                       "unguarded": 0, "text": "", "result": None, "result_subtype": None,
+                       "result_error": None, "output_tokens": None, "text_questions": None,
+                       "cost_usd": None, "ended": None}
+        self.pending: dict = {}                # tool_use id -> what the call was
+        self.awaiting: Optional[str] = None    # the verdict's call, until its result confirms it
+        self.first_skill_id: Optional[str] = None
+        self.declared = False                  # a declaration went through
         self.stopped = False
 
     def feed_line(self, line: str) -> bool:
@@ -75,7 +128,7 @@ class Scanner:
         return self.feed(event)
 
     def feed(self, event: object) -> bool:
-        """Take one event; True once the first committing call has been seen."""
+        """Take one event; True once the verdict is confirmed or the reply has ended."""
         if self.stopped or not isinstance(event, dict):
             return self.stopped
         kind = event.get("type")
@@ -84,38 +137,120 @@ class Scanner:
             self.record["superpowers_skills"] = sum(
                 1 for s in event.get("skills") or [] if isinstance(s, str) and s.startswith("superpowers:"))
         elif kind == "result":
-            self.record["result"] = event.get("result")
-            self.record["text_questions"] = (event.get("result") or "").count("?")
-            self.record["cost_usd"] = event.get("total_cost_usd")
+            self._reply(event)
+            self.stopped = True
         elif kind == "assistant":
+            if self.awaiting is not None:      # the model went on, so the call went through
+                self._confirm(self.awaiting, self.pending.pop(self.awaiting))
+                return True
             content = (event.get("message") or {}).get("content")
             for block in content if isinstance(content, list) else []:
                 if not isinstance(block, dict):
                     continue
                 if block.get("type") == "text" and block.get("text"):
                     self.record["text"] = "\n".join(filter(None, (self.record["text"], block["text"])))
-                elif block.get("type") == "tool_use" and self._commit(block):
-                    return True
-        return False
+                elif block.get("type") == "tool_use":
+                    self._call(block)
+        elif kind == "user":
+            content = (event.get("message") or {}).get("content")
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    self._returned(block)
+                    if self.stopped:
+                        break
+        return self.stopped
 
-    def _commit(self, block: dict) -> bool:
-        name, inputs = block.get("name"), block.get("input") or {}
-        if name not in STOP_TOOLS:
-            self.record["before"].append(name)
-            return False
-        if name in EDIT_TOOLS and self._outside_workspace(inputs):
-            self.record["before"].append(f"{name}(outside)")
-            return False
-        if name == "Skill":
-            self.record["skills"].append(inputs.get("skill"))
-            self.record["skill"] = self.record["skill"] or inputs.get("skill")
-            if self.past_skill:
-                return False
+    def _reply(self, event: dict) -> None:
+        denials = event.get("permission_denials")
+        usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
+        self.record.update({
+            "result": event.get("result"),
+            "text_questions": (event.get("result") or "").count("?"),
+            "cost_usd": event.get("total_cost_usd"),
+            "result_subtype": event.get("subtype"),
+            "result_error": bool(event.get("is_error")),
+            "output_tokens": usage.get("output_tokens"),
+            "denials": len(denials) if isinstance(denials, list) else None,
+            "ended": self.record["ended"] or "reply",
+        })
+
+    def _call(self, block: dict) -> None:
+        """A tool call: exploration is recorded now; a committing call is the verdict until its
+        result says otherwise."""
+        name, inputs, call_id = block.get("name"), block.get("input") or {}, block.get("id")
+        info = {"name": name, "label": None, "change": False, "skill": None, "ask": False}
+        if name in EDIT_TOOLS:
+            if self._outside_workspace(inputs):
+                self.record["before"].append(f"{name}(outside)")
+            else:
+                info["change"] = True
+        elif name == "Bash":
+            info["label"] = gate.classify_command(inputs.get("command") or "")
+            info["change"] = bool(info["label"])
+            if not info["change"]:
+                self.record["before"].append(name)
+        elif name == "Skill":
+            info["skill"] = inputs.get("skill")
+            self.record["skills"].append(info["skill"])
+            if self.record["skill"] is None:
+                self.record["skill"], self.first_skill_id = info["skill"], call_id
         elif name == "AskUserQuestion":
+            info["ask"] = True
             self.record["questions"] = len(inputs.get("questions") or [])
-        self.record["first_tool"] = name
-        self.stopped = True
-        return True
+        else:
+            self.record["before"].append(name)
+        self.pending[call_id] = info
+        if self._commits(info) and self.awaiting is None and self.record["first_tool"] is None:
+            self._take(call_id, info)
+
+    def _commits(self, info: dict) -> bool:
+        return info["change"] or info["ask"] or (info["skill"] is not None and not self.past_skill)
+
+    def _take(self, call_id: Optional[str], info: dict) -> None:
+        self.record["first_tool"], self.record["label"] = info["name"], info["label"]
+        self.awaiting = call_id
+
+    def _retract(self) -> None:
+        self.record["first_tool"], self.record["label"], self.awaiting = None, None, None
+
+    def _returned(self, block: dict) -> None:
+        """A call's result confirms the verdict, or counts a refusal or a failure."""
+        call_id = block.get("tool_use_id")
+        info = self.pending.pop(call_id, None)
+        error = bool(block.get("is_error"))
+        refused = error and gate.REFUSAL_PREFIX.rstrip(": ") in _result_text(block)
+        if refused:
+            self.record["refusals"] += 1
+            if self.declared:                  # the gate should be open: a refusal now is a defect
+                self.record["late_refusals"] += 1
+        elif error:
+            self.record["failed_calls"] += 1
+        if info is None:
+            return
+        if info["skill"] is not None:
+            if call_id == self.first_skill_id:
+                self.record["skill_failed"] = error
+            if not error and gate.is_declaration(info["skill"]):
+                self.declared = True
+        if not self._commits(info):
+            return
+        if error and not info["ask"]:                  # nothing happened: not the verdict
+            if info["change"]:
+                self.record["before"].append(f"{info['name']}({'refused' if refused else 'failed'})")
+                if call_id == self.awaiting:
+                    self._retract()
+                return
+        if call_id != self.awaiting:                   # the verdict retracted earlier; this one is it
+            if self.record["first_tool"] is not None:
+                return
+            self._take(call_id, info)
+        self._confirm(call_id, info)
+
+    def _confirm(self, call_id: Optional[str], info: dict) -> None:
+        if info["change"] and not self.declared:
+            self.record["unguarded"] += 1
+        self.record["ended"] = "commit"
+        self.awaiting, self.stopped = None, True
 
     def _outside_workspace(self, inputs: dict) -> bool:
         """True for an edit whose target lies outside the run's workspace."""
@@ -128,7 +263,7 @@ class Scanner:
         return not path.resolve().is_relative_to(self.workspace)
 
 
-def scan(stream: Path, past_skill: bool = False, workspace: Path | None = None) -> dict:
+def scan(stream: Path, past_skill: bool = False, workspace: Optional[Path] = None) -> dict:
     scanner = Scanner(past_skill, workspace)
     for line in stream.read_text().splitlines():
         if scanner.feed_line(line):
@@ -150,10 +285,18 @@ def stop(proc: subprocess.Popen, sig: int) -> None:
             pass
 
 
-def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float,
-             past_skill: bool, superpowers: bool) -> dict:
-    run_dir.mkdir(parents=True, exist_ok=True)
+def prepare_workspace(scenario: str, run_dir: Path) -> None:
+    """A fresh fixture copy at the scenario's baseline, in <run_dir>/workspace."""
     subprocess.run([str(PREPARE), scenario, str(run_dir)], check=True, capture_output=True)
+
+
+def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float,
+             past_skill: bool, superpowers: bool, prepare=prepare_workspace) -> dict:
+    """One headless run. The record says how it ended: `commit` (stopped at the confirmed
+    verdict), `reply` (the result event arrived), `timeout`, or `exit` (the process ended
+    without a result, `exit_code` says how)."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    prepare(scenario, run_dir)
     workspace = run_dir / "workspace"
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--permission-mode", "acceptEdits", "--settings", settings(superpowers)]
@@ -180,13 +323,21 @@ def run_once(scenario: str, arm: str, prompt: str, run_dir: Path, timeout: float
                 except subprocess.TimeoutExpired:
                     stop(proc, signal.SIGKILL)
                     proc.wait()
-    return {**scanner.record, "seconds": round(time.monotonic() - started),
+            proc.stdout.close()
+    record = dict(scanner.record)
+    if expired.is_set():
+        record["ended"] = "timeout"
+    elif record["ended"] is None:
+        record["ended"] = "exit"
+    return {**record, "exit_code": proc.returncode, "seconds": round(time.monotonic() - started),
             "timed_out": expired.is_set(), "stream": str(run_dir / "stream.jsonl")}
 
 
 def verdict(record: dict) -> str:
     if record["first_tool"] == "Skill":
         return f"Skill {record['skill']}"
+    if record["first_tool"] == "Bash":
+        return f"Bash ({record.get('label')})"
     if record["first_tool"]:
         return record["first_tool"]
     if record.get("timed_out"):
@@ -194,29 +345,169 @@ def verdict(record: dict) -> str:
     return "reply" if record["result"] is not None else "no commit"
 
 
-def print_summary(label: str, arm: str, out: Path, records: list[dict]) -> None:
+def expectation(scenario: str) -> Optional[dict]:
+    """tests/scenarios/<scenario>/expect.json: the first skill the scenario expects (`skill`, one
+    name or a list of acceptable ones), whether a gate refusal is allowed in it (`refusal`),
+    whether runs continue past skill calls (`past_skill`), and how many runs its evidence
+    takes (`runs`). None when there is none."""
+    path = SCENARIOS / scenario / "expect.json"
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    skill = data.get("skill")
+    data["skill"] = [skill] if isinstance(skill, str) else list(skill or [])    # one, or any of several
+    return {"refusal": False, "past_skill": False, "runs": 5, **data}
+
+
+def _first_line(text: Optional[str]) -> str:
+    return (text or "").strip().splitlines()[0][:120] if (text or "").strip() else ""
+
+
+def judge_run(record: dict, expect: dict) -> "tuple[str, str]":
+    """One run against its expectation: ("match", ""), ("miss", why) or ("error", why).
+
+    An error is the run not being a run: the harness or the platform got in the way, so it
+    says nothing about the routing either way and is listed apart. A miss is the model doing
+    something other than what the expectation says.
+    """
+    if record.get("timed_out"):
+        return "error", "timed out"
+    if record.get("ended") == "exit":
+        return "error", f"claude exited with code {record.get('exit_code')} before any result"
+    subtype = record.get("result_subtype")
+    if record.get("result_error") or (subtype is not None and subtype != "success"):
+        return "error", f"the result was an error ({subtype}): {_first_line(record.get('result'))}"
+    if record.get("output_tokens") == 0:
+        return "error", f"the reply carried no tokens: {_first_line(record.get('result'))}"
+    denials = record.get("denials") or 0
+    if denials:
+        noun = "permission denial" if denials == 1 else "permission denials"
+        return "error", f"{denials} {noun}: the harness settings blocked a call the model made"
+    skill, first_tool, expected = record.get("skill"), record.get("first_tool"), " or ".join(expect["skill"])
+    if skill is None:
+        what = first_tool or ("replied" if record.get("ended") == "reply" else "no committing call")
+        return "miss", f"no skill was invoked ({what}); expected {expected}"
+    if record.get("skill_failed"):
+        return "miss", f"the first skill call failed: {skill}"
+    if skill not in expect["skill"]:
+        return "miss", f"first skill {skill}, expected {expected}"
+    unguarded = record.get("unguarded") or 0
+    if unguarded:
+        noun = "change" if unguarded == 1 else "changes"
+        return "miss", f"{unguarded} {noun} went through before any declaration"
+    if record.get("late_refusals"):
+        return "miss", "the gate refused a call after the declaration"
+    refusals = record.get("refusals") or 0
+    if refusals and not expect["refusal"]:
+        noun = "refusal" if refusals == 1 else "refusals"
+        return "miss", f"{refusals} {noun}: a change was attempted before the route"
+    return "match", ""
+
+
+def judge_records(records: list) -> "tuple[bool, str]":
+    """Every scenario in `records` against its expectation file. True when each one has
+    every run matching; the report names each shortfall, misses and errors apart."""
+    by_scenario: dict = {}
+    for r in records:
+        by_scenario.setdefault(r.get("scenario"), []).append(r)
+    lines, ok = [], True
+    for scenario, runs in by_scenario.items():
+        expect = expectation(scenario or "")
+        if expect is None:
+            lines.append(f"== {scenario}: no expectation file (tests/scenarios/{scenario}/expect.json)")
+            ok = False
+            continue
+        outcomes = [(r, *judge_run(r, expect)) for r in runs]
+        matched = sum(1 for _, kind, _ in outcomes if kind == "match")
+        misses = sum(1 for _, kind, _ in outcomes if kind == "miss")
+        errors = sum(1 for _, kind, _ in outcomes if kind == "error")
+        refused = sum(1 for r in runs if r.get("refusals"))
+        policy = "a refusal allowed" if expect["refusal"] else "no refusal"
+        lines.append(f"== {scenario}: expected first skill {' or '.join(expect['skill'])}, {policy}; "
+                     f"{matched} of {len(runs)} runs matched; refusals in {refused} of {len(runs)}")
+        for r, kind, why in outcomes:
+            if kind != "match":
+                lines.append(f"   {kind:6} run {r.get('run')}: {why}")
+        if matched < len(runs):
+            ok = False
+            lines.append(f"FAIL: {scenario} short by {len(runs) - matched} "
+                         f"({misses} {'miss' if misses == 1 else 'misses'}, {errors} "
+                         f"{'error' if errors == 1 else 'errors'})")
+        else:
+            lines.append(f"PASS: {scenario} {matched} of {len(runs)}")
+    return ok, "\n".join(lines)
+
+
+def print_summary(label: str, arm: str, out: Path, records: list) -> None:
     print(f"{label} [{arm}] x{len(records)} -> {out}")
     for r in records:
         before = ",".join(r["before"]) or "-"
         skills = ",".join(s or "?" for s in r["skills"]) or "-"
         marks = "-" if r["text_questions"] is None else r["text_questions"]
+        denials = "?" if r.get("denials") is None else r["denials"]
         print(f"  run {r['run']}: {verdict(r):40} skills={skills:44.44} ?={marks!s:<3}"
-              f" sp={r['superpowers_skills']!s:<3} before={before:24.24} {r['seconds']:>4}s")
+              f" sp={r['superpowers_skills']!s:<3} before={before:24.24} {r['seconds']:>4}s"
+              f"  refused={r.get('refusals', 0)} failed={r.get('failed_calls', 0)} denied={denials}"
+              f" ended={r.get('ended')}({r.get('exit_code')})")
     counts = Counter(verdict(r) for r in records)
     print("  first committing call: " + ", ".join(f"{k} x{v}" for k, v in counts.most_common()))
 
 
-def main(argv: list[str] | None = None) -> int:
+def candidate() -> Optional[str]:
+    """The plugin revision under test: this repository's HEAD, when git can say."""
+    try:
+        return subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True,
+                              text=True, check=True).stdout.strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def all_scenarios() -> list:
+    return sorted(p.parent.name for p in SCENARIOS.glob("*/prompt.md"))
+
+
+def run_scenario(args, scenario: str, sha: Optional[str]) -> list:
+    """Every run of one scenario, records appended to <out>/results.jsonl."""
+    expect = expectation(scenario)
+    runs = args.runs or (expect["runs"] if expect else 5)
+    past_skill = args.past_skill or bool(expect and expect["past_skill"])
+    prompt = args.prompt or (SCENARIOS / scenario / "prompt.md").read_text().strip()
+    label = scenario if not args.label else (args.label if len(args.scenario) == 1 else f"{args.label}-{scenario}")
+    if args.out:
+        out = args.out if len(args.scenario) == 1 else args.out / scenario
+    else:
+        out = Path(tempfile.mkdtemp(prefix=f"mpw-{label}-{args.arm}-"))
+    out.mkdir(parents=True, exist_ok=True)
+
+    def one(n: int) -> dict:
+        record = run_once(scenario, args.arm, prompt, out / f"{args.arm}-{n}", args.timeout, past_skill,
+                          args.superpowers)
+        return {"label": label, "scenario": scenario, "arm": args.arm, "superpowers": args.superpowers,
+                "candidate": sha, "run": n, **record}
+
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        records = list(pool.map(one, range(1, runs + 1)))
+    with open(out / "results.jsonl", "a") as f:
+        for record in records:
+            f.write(json.dumps(record) + "\n")
+    print_summary(label, args.arm, out, records)
+    return records
+
+
+def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(description="Headless behavior tests for the plugin.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     scan_p = sub.add_parser("scan", help="print the record for a saved stream")
     scan_p.add_argument("--past-skill", action="store_true")
     scan_p.add_argument("--workspace", type=Path)
     scan_p.add_argument("stream", type=Path)
+    judge_p = sub.add_parser("judge", help="judge saved results.jsonl records against their expectation files")
+    judge_p.add_argument("results", type=Path, nargs="+")
     run_p = sub.add_parser("run", help="run headless sessions and record their first commits")
-    run_p.add_argument("--scenario", required=True)
+    run_p.add_argument("--scenario", action="append", required=True,
+                       help="a scenario under tests/scenarios (repeatable), or `all`")
     run_p.add_argument("--arm", choices=("plugin", "control"), required=True)
-    run_p.add_argument("--runs", type=int, default=5)
+    run_p.add_argument("--runs", type=int, help="default: the scenario's expect.json `runs`, else 5")
     run_p.add_argument("--jobs", type=int, default=5)
     run_p.add_argument("--past-skill", action="store_true")
     run_p.add_argument("--superpowers", action="store_true",
@@ -225,30 +516,30 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--label")
     run_p.add_argument("--timeout", type=float, default=300)
     run_p.add_argument("--out", type=Path)
+    run_p.add_argument("--assert", dest="check", action="store_true",
+                       help="judge the runs against each scenario's expect.json; exit 1 when any run is short")
     args = parser.parse_args(argv)
 
     if args.cmd == "scan":
         print(json.dumps(scan(args.stream, args.past_skill, args.workspace)))
         return 0
+    if args.cmd == "judge":
+        records = [json.loads(line) for path in args.results for line in path.read_text().splitlines()
+                   if line.strip()]
+        ok, report = judge_records(records)
+        print(report)
+        return 0 if ok else 1
 
-    prompt = args.prompt or (SCENARIOS / args.scenario / "prompt.md").read_text().strip()
-    label = args.label or args.scenario
-    out = args.out or Path(tempfile.mkdtemp(prefix=f"mpw-{label}-{args.arm}-"))
-    out.mkdir(parents=True, exist_ok=True)
-
-    def one(n: int) -> dict:
-        record = run_once(args.scenario, args.arm, prompt, out / f"{args.arm}-{n}",
-                          args.timeout, args.past_skill, args.superpowers)
-        return {"label": label, "scenario": args.scenario, "arm": args.arm,
-                "superpowers": args.superpowers, "run": n, **record}
-
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        records = list(pool.map(one, range(1, args.runs + 1)))
-    with open(out / "results.jsonl", "a") as f:
-        for record in records:
-            f.write(json.dumps(record) + "\n")
-    print_summary(label, args.arm, out, records)
-    return 0
+    if args.scenario == ["all"]:
+        args.scenario = all_scenarios()
+    sha = candidate()
+    records = [r for scenario in args.scenario for r in run_scenario(args, scenario, sha)]
+    if not args.check:
+        return 0
+    ok, report = judge_records(records)
+    print()
+    print(report)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

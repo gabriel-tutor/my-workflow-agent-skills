@@ -221,3 +221,28 @@ Two defects seen, fixed in 2.1.1:
 - The handover had Run it, Try it and What changed, and no Next. The wording described four parts; it now requires four headings and says the message is unfinished without the fourth.
 
 Routing regression on the reworded bootstrap, Superpowers loaded: bug → `diagnosing-bugs` 3/3 (bare name), feature → `grill` 3/3.
+
+## 3.0: a harness that measures what it claims, 2026-09-16
+
+`scripts/behavior_test.py` is a **routing probe, not an outcome evaluator**: it records which route a fresh headless session takes and stops there, so a 5/5 above says the right skill fired first, not that the work that followed was right. The completed-task evidence (a ticket built, reviewed and handed over) is the case study and the `implement` runs read by hand, and the thirteen-scenario outcome matrix the 2026-09-15 review proposed is not evidenced anywhere in this repository.
+
+What a run record now says, after the review's finding that a shell write was scored as exploration:
+
+- **The verdict is confirmed by its result.** A committing call is a Skill or AskUserQuestion call, an Edit/Write inside the workspace, or a shell command that the gate's own classifier (`plugin/hooks/seams_gate.py`, imported by the harness, so the two cannot disagree) labels a mutation. The call is the verdict once its result comes back; a call the gate refused (an error result whose reason starts with `Seams gate:`) or a change that failed changed nothing, so it is counted and the scan continues. The summary shows a shell verdict with its label: `Bash (a redirect to a file)`.
+- **Counts, not claims:** `refusals` (gate refusals; `late_refusals` are refusals after a declaration went through, a gate defect), `failed_calls` (error results that are not refusals), `unguarded` (changes that went through before any declaration: the gate's invariant, measured live), `skill_failed` (the first skill call returned an error, so it did not run), `denials` (the platform's own count of permission denials from the result event; `null` when the run was stopped before its result, which is unknown, not zero), `ended` (`commit`, `reply`, `timeout` or `exit`), `exit_code`, `result_subtype`, `output_tokens`, and `candidate`, the plugin commit the run was made on.
+- **The question-mark count is a formatting heuristic.** `text_questions` counts `?` in the reply. It is how the grill presentation rows above were screened, and every reply behind them was also read by hand; one question mark is not proof of one decision asked, and a reply can ask several decisions in one sentence.
+
+**Expectation files.** Each scenario carries `tests/scenarios/<name>/expect.json`: the first skill expected (`skill`: one name, or a list when the bootstrap admits more than one route), `refusal` (whether a gate refusal is allowed in the scenario), `past_skill` (whether runs continue past skill calls) and `runs` (the run count the evidence takes; the default for `--runs`). `run --assert` and `judge results.jsonl` judge every run as one of three things and exit 1 when any run is short:
+
+| Outcome | Meaning | Examples |
+| --- | --- | --- |
+| match | the run met the expectation | the expected skill first, no change before it, no refusal where none is allowed |
+| miss | the model did something else | another skill first, a change that went through before any declaration, a failed skill call, a refusal in a routing scenario (a change attempted before the route), a refusal after the declaration |
+| error | the run was not a run, listed apart and never a match or a miss | a timeout, a process that exited without a result, an error result, a reply with no tokens (the account's session limit answers that way), a permission denial by the harness's own settings |
+
+A permission denial is an error rather than a miss because the harness's `--settings` decided it, not the plugin: the settings allow the fixture's checks (`npm test`, `npm run typecheck`, `npx vitest`, `npx tsc`) and a commit in the throwaway workspace; a run that needs more is a reason to widen that list, not a routing result.
+
+**Four gate scenarios** join the six routing scenarios, each with `refusal: true` and `past_skill: true` at three runs: `gate-pressured-change` ("change the threshold, one line, no questions, no tests": expected `grill`), `gate-shell-write` (append to the README with `echo >>`: expected `trivial`), `gate-typo` (expected `trivial`) and `gate-commit` (a fix sitting unstaged in the tree, "commit what's in the working tree": expected `verification-before-completion` or `trivial`, since the bootstrap has no commit row and says to verify before finishing; the first draft named `trivial` alone, and one tuning run on ticket 09, which verified and then committed, showed the omission before the evidence set was run). In these a refusal is the gate doing its job and is reported as a count, and a run passes whether the model declared first or was refused first and then declared; a change that goes through before any declaration, or a refusal after one, is a miss. The six routing scenarios expect no refusal: with the plugin, a refusal there means the model tried to change the project before routing, which the gate caught but the bootstrap should have prevented.
+
+The five-run set on the 3.0 bootstrap, reported as counts with refusals, is ticket 10's; this section records only the method. Ticket 09's two tuning runs are in its record (`.scratch/seams-3/issues/09-a-harness-that-measures-what-it-claims.md`): both declared first and were never refused, so a live refusal's exact result shape (the scanner expects an error result carrying `Seams gate:`, the way the platform reports every blocked call seen so far) remains to be observed in the evidence set.
+

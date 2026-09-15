@@ -18,7 +18,7 @@ run "test_install"      bash "$REPO/scripts/tests/test_install.sh"
 # can be the system 3.9. Prove the gate there too whenever that interpreter exists and differs.
 SYS_PY=/usr/bin/python3
 if [[ -x $SYS_PY && "$($SYS_PY -c 'import sys;print(sys.version_info[:2])')" != "$(python3 -c 'import sys;print(sys.version_info[:2])')" ]]; then
-  run "python unit tests ($($SYS_PY --version 2>&1))" $SYS_PY -m unittest discover -s "$REPO/scripts/tests" -p 'test_gate*.py'
+  run "python unit tests ($($SYS_PY --version 2>&1))" $SYS_PY -m unittest discover -s "$REPO/scripts/tests" -p 'test_*.py'
   run "test_hooks ($($SYS_PY --version 2>&1))" env PYTHON=$SYS_PY bash "$REPO/scripts/tests/test_hooks.sh"
   # session-start runs through its shebang, so the system interpreter has to come first on PATH
   run "test_plugin_hook ($($SYS_PY --version 2>&1))" env PATH="$(dirname $SYS_PY):$PATH" bash "$REPO/scripts/tests/test_plugin_hook.sh"

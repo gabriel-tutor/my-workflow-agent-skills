@@ -6,7 +6,12 @@ tool calls before it, the assistant text before it, and, when no such call happe
 final result. With --past-skill, Skill calls are recorded but do not stop the scan, so a
 test can see what the skill then does (for instance, the grill's first question).
 """
+from __future__ import annotations
+
+import importlib.util
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -17,6 +22,13 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 HARNESS = REPO / "scripts" / "behavior_test.py"
 
+
+def load_harness():
+    spec = importlib.util.spec_from_file_location("behavior_test", HARNESS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5"}
 
 
@@ -25,7 +37,17 @@ def assistant(*blocks: dict) -> dict:
 
 
 def tool(name: str, **inputs: object) -> dict:
-    return {"type": "tool_use", "id": f"toolu_{name}", "name": name, "input": inputs}
+    return {"type": "tool_use", "id": inputs.pop("id", None) or f"toolu_{name}", "name": name, "input": inputs}
+
+
+def tool_result(tool_use_id: str, content: str, error: bool = False) -> dict:
+    """The user event Claude Code emits when a tool call returns (or is refused)."""
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": error}]}}
+
+
+REFUSED = ("PreToolUse hook denied: Seams gate: a shell command (`a redirect to a file`) changes the "
+           "project, and this request has no declaration yet: no process skill has been invoked for it.")
 
 
 def text(value: str) -> dict:
@@ -119,6 +141,259 @@ class ScanTest(unittest.TestCase):
                  {"type": "assistant", "message": {"role": "assistant", "content": ["not a block", 7]}},
                  assistant(tool("Skill", skill="diagnosing-bugs")))
         self.assertEqual(r["skill"], "diagnosing-bugs")
+
+
+class ShellMutationTest(unittest.TestCase):
+    """A shell command that changes the project is a committing call, scored the way the gate
+    scores it (the same classifier), not as exploration."""
+
+    def test_a_shell_write_before_the_first_skill_is_the_verdict(self):
+        r = scan(INIT,
+                 assistant(tool("Bash", command="echo x > src/f.ts")),
+                 assistant(tool("Skill", skill="diagnosing-bugs")))
+        self.assertEqual((r["first_tool"], r["label"], r["skill"]), ("Bash", "a redirect to a file", None))
+        self.assertEqual(r["before"], [])
+
+    def test_a_read_only_shell_command_is_exploration(self):
+        r = scan(INIT,
+                 assistant(tool("Bash", command="git status && npm test")),
+                 assistant(tool("Skill", skill="diagnosing-bugs")))
+        self.assertEqual((r["first_tool"], r["label"], r["skill"]), ("Skill", None, "diagnosing-bugs"))
+        self.assertEqual(r["before"], ["Bash"])
+
+
+class ToolResultTest(unittest.TestCase):
+    """What a call's result says about it: refused by the gate, failed, or gone through."""
+
+    def test_a_gate_refusal_is_counted_and_is_not_the_commit(self):
+        r = scan(INIT,
+                 assistant(tool("Bash", id="t1", command="echo x > src/f.ts")),
+                 tool_result("t1", REFUSED, error=True),
+                 assistant(tool("Skill", id="t2", skill="matt-pocock-workflow:trivial")),
+                 tool_result("t2", "Launching skill: matt-pocock-workflow:trivial"),
+                 assistant(tool("Bash", id="t3", command="echo x > src/f.ts")),
+                 tool_result("t3", ""))
+        self.assertEqual(r["refusals"], 1)
+        self.assertEqual((r["first_tool"], r["skill"]), ("Skill", "matt-pocock-workflow:trivial"))
+        self.assertEqual(r["before"], ["Bash(refused)"])
+        self.assertEqual((r["failed_calls"], r["unguarded"]), (0, 0))
+
+    def test_an_error_result_is_a_failed_call_and_a_failed_change_is_not_the_commit(self):
+        r = scan(INIT,
+                 assistant(tool("Bash", id="t1", command="npm test")),
+                 tool_result("t1", "Exit code 1\nFAIL tests/pricing.test.ts", error=True),
+                 assistant(tool("Edit", id="t2", file_path="src/pricing.ts", old_string="x", new_string="y")),
+                 tool_result("t2", "String to replace not found in file.", error=True),
+                 assistant(tool("Skill", id="t3", skill="tdd")),
+                 tool_result("t3", "Launching skill: tdd"))
+        self.assertEqual((r["failed_calls"], r["refusals"]), (2, 0))
+        self.assertEqual((r["first_tool"], r["skill"], r["before"]), ("Skill", "tdd", ["Bash", "Edit(failed)"]))
+
+    def test_a_change_that_goes_through_before_any_declaration_is_unguarded(self):
+        r = scan(INIT,
+                 assistant(tool("Edit", id="t1", file_path="src/pricing.ts", old_string="x", new_string="y")),
+                 tool_result("t1", "The file src/pricing.ts has been updated successfully."))
+        self.assertEqual((r["first_tool"], r["unguarded"], r["ended"]), ("Edit", 1, "commit"))
+
+    def test_a_change_after_a_declaration_is_guarded(self):
+        r = scan(INIT,
+                 assistant(tool("Skill", id="t1", skill="matt-pocock-workflow:trivial")),
+                 tool_result("t1", "Launching skill: matt-pocock-workflow:trivial"),
+                 assistant(tool("Edit", id="t2", file_path="src/format.ts", old_string="x", new_string="y")),
+                 tool_result("t2", "The file src/format.ts has been updated successfully."),
+                 past_skill=True)
+        self.assertEqual((r["first_tool"], r["skill"], r["unguarded"]), ("Edit", "matt-pocock-workflow:trivial", 0))
+
+    def test_a_failed_skill_invocation_is_recorded_as_such(self):
+        failed = scan(INIT,
+                      assistant(tool("Skill", id="t1", skill="matt-pocock-workflow:code-review")),
+                      tool_result("t1", "Unknown skill: matt-pocock-workflow:code-review", error=True))
+        ran = scan(INIT,
+                   assistant(tool("Skill", id="t1", skill="code-review")),
+                   tool_result("t1", "Launching skill: code-review"))
+        self.assertEqual((failed["skill"], failed["skill_failed"], failed["failed_calls"]),
+                         ("matt-pocock-workflow:code-review", True, 1))
+        self.assertEqual((ran["skill"], ran["skill_failed"]), ("code-review", False))
+        self.assertIsNone(scan(INIT, assistant(tool("Skill", skill="tdd")))["skill_failed"])
+
+    def test_the_reply_records_denials_and_the_result_state(self):
+        r = scan(INIT,
+                 assistant(text("Done.")),
+                 {"type": "result", "subtype": "success", "result": "Done.", "is_error": False,
+                  "usage": {"output_tokens": 42}, "total_cost_usd": 0.1,
+                  "permission_denials": [{"tool_name": "Bash", "tool_use_id": "t9"}]})
+        self.assertEqual((r["denials"], r["result_subtype"], r["result_error"], r["output_tokens"], r["ended"]),
+                         (1, "success", False, 42, "reply"))
+        self.assertIsNone(scan(INIT, assistant(tool("Skill", skill="tdd")))["denials"])
+
+
+class RunRecordTest(unittest.TestCase):
+    """How a run ended, from run_once with a stub `claude` on PATH: the process exit code, a
+    timeout, a reply, or a stop at the confirmed verdict."""
+
+    SKILL_STREAM = [INIT, assistant(tool("Skill", id="t1", skill="diagnosing-bugs")),
+                    tool_result("t1", "Launching skill: diagnosing-bugs")]
+
+    def run_with_stub(self, script: str, timeout: float = 5.0) -> dict:
+        harness = load_harness()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stub = root / "bin" / "claude"
+            stub.parent.mkdir()
+            stub.write_text("#!/bin/sh\n" + script)
+            stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            saved = os.environ["PATH"]
+            os.environ["PATH"] = f"{stub.parent}:{saved}"
+            try:
+                return harness.run_once("cosmetic-edit", "plugin", "fix it", root / "run", timeout,
+                                        past_skill=False, superpowers=False,
+                                        prepare=lambda scenario, run_dir: (run_dir / "workspace").mkdir(parents=True))
+            finally:
+                os.environ["PATH"] = saved
+
+    @staticmethod
+    def emit(*events: dict) -> str:
+        return "".join(f"echo '{json.dumps(e)}'\n" for e in events)
+
+    def test_a_process_that_exits_without_a_result_is_recorded_with_its_code(self):
+        r = self.run_with_stub(self.emit(INIT) + "exit 3\n")
+        self.assertEqual((r["ended"], r["exit_code"], r["first_tool"], r["timed_out"]), ("exit", 3, None, False))
+
+    def test_a_timeout_is_recorded(self):
+        r = self.run_with_stub(self.emit(INIT) + "sleep 30\n", timeout=0.5)
+        self.assertEqual((r["ended"], r["timed_out"]), ("timeout", True))
+
+    def test_a_reply_ends_the_run_with_exit_zero(self):
+        r = self.run_with_stub(self.emit(INIT, {"type": "result", "subtype": "success", "result": "ok?",
+                                                "is_error": False, "usage": {"output_tokens": 5},
+                                                "permission_denials": []}))
+        self.assertEqual((r["ended"], r["exit_code"], r["denials"]), ("reply", 0, 0))
+
+    def test_a_run_stopped_at_its_verdict_is_a_commit_whatever_the_kill_code(self):
+        r = self.run_with_stub(self.emit(*self.SKILL_STREAM) + "sleep 30\n")
+        self.assertEqual((r["ended"], r["first_tool"], r["skill"]), ("commit", "Skill", "diagnosing-bugs"))
+        self.assertNotEqual(r["exit_code"], 0)
+
+
+def record(scenario: str, run: int, **fields: object) -> dict:
+    """A run record as results.jsonl holds it: a clean routing verdict unless overridden."""
+    base = {"scenario": scenario, "arm": "plugin", "run": run, "first_tool": "Skill", "skill": None,
+            "skill_failed": False, "refusals": 0, "late_refusals": 0, "failed_calls": 0, "denials": None,
+            "unguarded": 0, "ended": "commit", "exit_code": -15, "timed_out": False, "result": None,
+            "result_subtype": None, "result_error": None, "output_tokens": None}
+    return {**base, **fields}
+
+
+def judge(*records: dict) -> "tuple[int, str]":
+    """`behavior_test.py judge results.jsonl`: the exit status and the report."""
+    with tempfile.TemporaryDirectory() as d:
+        results = Path(d) / "results.jsonl"
+        results.write_text("".join(json.dumps(r) + "\n" for r in records))
+        out = subprocess.run([sys.executable, str(HARNESS), "judge", str(results)], capture_output=True, text=True)
+    return out.returncode, out.stdout + out.stderr
+
+
+class JudgeTest(unittest.TestCase):
+    """A run matches its scenario's expectation file, misses it, or was not a run at all
+    (an infrastructure error, listed apart and never counted as a match)."""
+
+    TRIVIAL = "matt-pocock-workflow:trivial"
+
+    def test_every_run_matching_exits_zero(self):
+        code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL),
+                             record("cosmetic-edit", 2, skill=self.TRIVIAL))
+        self.assertEqual(code, 0, report)
+        self.assertIn("cosmetic-edit", report)
+        self.assertIn("2 of 2", report)
+
+    def test_a_wrong_first_skill_is_a_miss_named_with_its_shortfall(self):
+        code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL),
+                             record("cosmetic-edit", 2, skill="matt-pocock-workflow:grill"),
+                             record("cosmetic-edit", 3, skill=self.TRIVIAL))
+        self.assertEqual(code, 1)
+        self.assertIn("2 of 3", report)
+        self.assertRegex(report, r"run 2:.*matt-pocock-workflow:grill.*expected matt-pocock-workflow:trivial")
+
+    def test_infrastructure_errors_are_listed_apart_and_never_match(self):
+        code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL, timed_out=True, ended="timeout"),
+                             record("cosmetic-edit", 2, skill=None, first_tool=None, ended="exit", exit_code=1),
+                             record("cosmetic-edit", 3, skill=None, first_tool=None, ended="reply", exit_code=0,
+                                    result_subtype="success", result_error=False, output_tokens=0,
+                                    result="You have hit your session limit."),
+                             record("cosmetic-edit", 4, skill=self.TRIVIAL, ended="reply", exit_code=0,
+                                    result_subtype="success", result_error=False, output_tokens=90, denials=2))
+        self.assertEqual(code, 1)
+        self.assertIn("0 of 4", report)
+        self.assertRegex(report, r"error\s+run 1: timed out")
+        self.assertRegex(report, r"error\s+run 2: .*exit.*1")
+        self.assertRegex(report, r"error\s+run 3: .*no tokens.*session limit")
+        self.assertRegex(report, r"error\s+run 4: .*2 permission denials")
+        self.assertNotIn("miss ", report)
+
+    def test_a_failed_skill_call_and_an_unguarded_change_are_misses(self):
+        code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL, skill_failed=True),
+                             record("cosmetic-edit", 2, skill=self.TRIVIAL, unguarded=1, first_tool="Edit"),
+                             record("cosmetic-edit", 3, skill=None, first_tool="Edit", unguarded=1))
+        self.assertEqual(code, 1)
+        self.assertRegex(report, r"miss\s+run 1: .*skill call failed")
+        self.assertRegex(report, r"miss\s+run 2: .*1 change went through before any declaration")
+        self.assertRegex(report, r"miss\s+run 3: no skill was invoked \(Edit\)")
+
+    def test_a_refusal_is_a_miss_where_none_is_expected_and_counted_where_one_is(self):
+        code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL, refusals=1))
+        self.assertEqual(code, 1)
+        self.assertRegex(report, r"miss\s+run 1: .*1 refusal")
+        code, report = judge(record("gate-typo", 1, skill=self.TRIVIAL, refusals=1, first_tool="Edit"),
+                             record("gate-typo", 2, skill=self.TRIVIAL, refusals=0, first_tool="Edit"))
+        self.assertEqual(code, 0, report)
+        self.assertIn("refusals in 1 of 2", report)
+        code, report = judge(record("gate-typo", 1, skill=self.TRIVIAL, refusals=2, late_refusals=1))
+        self.assertEqual(code, 1)
+        self.assertRegex(report, r"miss\s+run 1: .*after the declaration")
+
+    def test_an_expectation_may_name_several_acceptable_first_skills(self):
+        verify = "matt-pocock-workflow:verification-before-completion"
+        code, report = judge(record("gate-commit", 1, skill=verify, first_tool="Bash", label="git add"),
+                             record("gate-commit", 2, skill=self.TRIVIAL, first_tool="Bash", label="git add"))
+        self.assertEqual(code, 0, report)
+        self.assertIn(f"{verify} or {self.TRIVIAL}", report)
+        code, report = judge(record("gate-commit", 1, skill="matt-pocock-workflow:grill"))
+        self.assertEqual(code, 1)
+        self.assertRegex(report, r"miss\s+run 1: first skill matt-pocock-workflow:grill, expected " + verify)
+
+    def test_a_scenario_without_an_expectation_file_fails_loudly(self):
+        code, report = judge(record("no-such-scenario", 1, skill=self.TRIVIAL))
+        self.assertEqual(code, 1)
+        self.assertIn("no-such-scenario", report)
+        self.assertIn("expect.json", report)
+
+
+class ScenarioFilesTest(unittest.TestCase):
+    """Every scenario the harness can run carries a prompt, a setup and an expectation whose
+    first skill is a declaration (a Seams skill or one of Matt Pocock's process skills)."""
+
+    def test_every_scenario_has_its_three_files_and_a_declaration_to_expect(self):
+        harness = load_harness()
+        names = harness.all_scenarios()
+        self.assertGreaterEqual(len(names), 10)
+        for name in names:
+            with self.subTest(scenario=name):
+                folder = harness.SCENARIOS / name
+                self.assertTrue((folder / "setup.sh").is_file(), "setup.sh")
+                expect = harness.expectation(name)
+                self.assertIsNotNone(expect, "expect.json")
+                for skill in expect["skill"]:
+                    self.assertTrue(harness.gate.is_declaration(skill), skill)
+                self.assertIsInstance(expect["refusal"], bool)
+                self.assertGreater(expect["runs"], 0)
+
+    def test_the_gate_scenarios_allow_a_refusal_and_run_past_the_skill(self):
+        harness = load_harness()
+        gates = [n for n in harness.all_scenarios() if n.startswith("gate-")]
+        self.assertEqual(len(gates), 4, gates)
+        for name in gates:
+            expect = harness.expectation(name)
+            self.assertTrue(expect["refusal"] and expect["past_skill"], name)
 
 
 class PastSkillTest(unittest.TestCase):

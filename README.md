@@ -226,6 +226,9 @@ scripts/tests/test_plugin_hook.sh     # the bootstrap hook against fixture homes
 scripts/tests/test_hooks.sh           # the gate hooks fed JSON on stdin (PYTHON=/usr/bin/python3 for the system 3.9)
 scripts/tests/test_install.sh         # the installer in fixture homes, against a stub claude CLI
 scripts/tests/test_prepare_run.sh     # the sandbox workspaces the routing tests run in
-python3 -m unittest discover -s scripts/tests -p 'test_*.py'   # the gate module and the harness scanner
-python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --runs 5   # a routing test, headless
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'   # the gate module and the harness (scanner, judge, run records)
+python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --assert   # a routing test, headless: exit 1 when a run is short
+python3 scripts/behavior_test.py run --scenario all --arm plugin --assert              # every scenario at its expect.json run count
 ```
+
+The routing harness is a probe of which skill fires first, not an evaluator of the work that follows; `docs/plugin-behavior-tests.md` says what its records hold and what they do not.

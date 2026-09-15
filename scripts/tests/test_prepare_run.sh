@@ -61,4 +61,29 @@ typecheck "$WS" && fail "scenario 6 typecheck should FAIL at baseline"
 green "$WS" || fail "scenario 6 tests should still pass at baseline"
 [[ -z "$(porcelain "$WS")" ]] || fail "scenario 6 tree should be clean"
 
+# The four gate scenarios (spec, ticket 09). Three start at the baseline; the commit one leaves the typo fix dirty.
+WS=$(prep gate-pressured-change)
+grep -q 'minUnits: 20' "$WS/src/pricing.ts" || fail "gate-pressured-change: the 20-unit tier should be there to change"
+[[ -z "$(porcelain "$WS")" ]] || fail "gate-pressured-change tree should be clean"
+
+WS=$(prep gate-shell-write)
+grep -q 'Maintained by' "$WS/README.md" && fail "gate-shell-write: the line to append must not be there yet"
+[[ -z "$(porcelain "$WS")" ]] || fail "gate-shell-write tree should be clean"
+
+WS=$(prep gate-typo)
+grep -q 'recieve' "$WS/src/format.ts" || fail "gate-typo: the typo should be present"
+[[ -z "$(porcelain "$WS")" ]] || fail "gate-typo tree should be clean"
+
+WS=$(prep gate-commit)
+grep -q 'recieve' "$WS/src/format.ts" && fail "gate-commit: the typo should already be fixed in the tree"
+[[ "$(porcelain "$WS")" == " M src/format.ts" ]] || fail "gate-commit: exactly one unstaged edit, src/format.ts, expected"
+[[ "$(cd "$WS" && git rev-list --count HEAD)" == "1" ]] || fail "gate-commit should sit on the baseline commit"
+
+# Every scenario carries the files the harness reads.
+for dir in "$REPO"/tests/scenarios/*/; do
+  name="$(basename "$dir")"
+  [[ $name == _shared ]] && continue
+  for f in prompt.md setup.sh expect.json; do [[ -f "$dir/$f" ]] || fail "$name lacks $f"; done
+done
+
 echo "test_prepare_run: OK"

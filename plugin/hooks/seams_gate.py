@@ -480,9 +480,12 @@ ROUTES = ("Route it first, with the Skill tool: `diagnosing-bugs` for something 
           "or security. Then retry this call.")
 
 
+REFUSAL_PREFIX = "Seams gate: "                # a refused call's reason starts with it; the harness counts by it
+
+
 def deny_reason(change: dict) -> str:
     what = describe(change) if change["tool"] == "Bash" else f"editing {describe(change)}"
-    return (f"Seams gate: {what} changes the project, and this request has no declaration yet: "
+    return (f"{REFUSAL_PREFIX}{what} changes the project, and this request has no declaration yet: "
             f"no process skill has been invoked for it. {ROUTES}")
 
 
