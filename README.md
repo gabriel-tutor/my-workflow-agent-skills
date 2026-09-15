@@ -118,21 +118,22 @@ Matt Pocock's method plus the rigor around it that neither collection carried:
 
 ## How to use it
 
-### Install (any machine, one command)
+### Install (one command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gabriel-tutor/seams/main/scripts/install.sh | bash
 ```
 
-Read it first if you like: [`scripts/install.sh`](scripts/install.sh). It is safe to re-run, and it does five things, skipping any that are already done:
+Read it first if you like: [`scripts/install.sh`](scripts/install.sh). It is safe to re-run, and it does four things, skipping any that are already done. The first `claude plugin` command that fails stops it, with that command's output, so it either succeeds or says which step did not:
 
-1. Checks for the `claude` CLI, Node and Python 3.
-2. Installs [Matt Pocock's skills](https://github.com/mattpocock/skills) into `~/.claude/skills` with skills.sh (`npx skills add mattpocock/skills`), unless they are there already. The plugin invokes his installed skills by name; its own `to-spec`, `to-tickets` and `implement` are adaptations of his three (MIT, attributed with the upstream commit and file hashes in `plugin/THIRD_PARTY_NOTICES.md`), so nothing reads his user-only files at runtime.
-3. Adds this repo as a plugin marketplace from GitHub and installs `matt-pocock-workflow` from it.
-4. Adds two Read permission rules to `~/.claude/settings.json`, after backing it up to `settings.json.pre-mpw-install`: one for the plugin directory, which the bootstrap's reference file needs (without it Claude asks for permission each time), and one for `~/.claude/skills`, which nothing needs any more: no step reads Matt Pocock's files at runtime.
-5. Leaves Superpowers alone. Set `MPW_DISABLE_SUPERPOWERS=1` to disable it for a single bootstrap per session; either way, Matt Pocock's skills win every overlap (tested below).
+1. Checks for the `claude` CLI, Node, and `python3` at 3.9 or newer. The hooks run under whichever `python3` is first on PATH; an older one is named and the install stops there.
+2. Installs [Matt Pocock's skills](https://github.com/mattpocock/skills) into your Claude config directory's `skills/` with skills.sh (`npx skills add mattpocock/skills`) when any of the nine the plugin invokes is missing; the missing ones are named first. This step needs a terminal to pick skills in; piped without one, it stops and prints the command to run yourself. The plugin invokes his installed skills by name; its own `to-spec`, `to-tickets` and `implement` are adaptations of his three (MIT, attributed with the upstream commit and file hashes in `plugin/THIRD_PARTY_NOTICES.md`), so nothing reads his user-only files at runtime.
+3. Adds this repo as a plugin marketplace from GitHub, installs `matt-pocock-workflow` from it (updates it when it is already there) and enables it.
+4. Leaves Superpowers alone. Set `MPW_DISABLE_SUPERPOWERS=1` to disable it for a single bootstrap per session; either way, Matt Pocock's skills lead every overlap (tested below).
 
-Then restart Claude Code. Every new session opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are, and a nudge toward `foundations` when the repo has no `docs/agents/issue-tracker.md` yet.
+The installer never writes `settings.json` itself and adds no permission rules; the `claude plugin` commands record the marketplace and the enabled plugin there (`extraKnownMarketplaces`, `enabledPlugins`), exactly as they do when you run them by hand. If Claude asks before reading the plugin's own `references/routing.md`, allow it, or add `Read(~/.claude/plugins/**)` to `permissions.allow` yourself. The config directory is `CLAUDE_CONFIG_DIR` when set, else `~/.claude`; the installer, the session hook and skills.sh all honour it. What all this was tested with is in [`docs/compatibility.md`](docs/compatibility.md); Windows is not supported.
+
+Then restart Claude Code. Every new session opens with the routing policy, plus two lines computed for that session: where Matt Pocock's skill files are (or which required ones are missing, with the install command), and a nudge toward `foundations` when the repo has no `docs/agents/issue-tracker.md` yet.
 
 Don't install Matt's official `mattpocock-skills` Claude Code plugin alongside: you'd have every skill twice.
 
@@ -140,22 +141,13 @@ Don't install Matt's official `mattpocock-skills` Claude Code plugin alongside: 
 <summary>By hand, or from a local clone</summary>
 
 ```bash
-npx skills@latest add mattpocock/skills                         # Matt Pocock's skills, into ~/.claude/skills
+npx skills@latest add mattpocock/skills --agent claude-code --global   # Matt Pocock's skills, into your config dir's skills/
 claude plugin marketplace add gabriel-tutor/seams
 claude plugin install matt-pocock-workflow@my-workflow-agent-skills
-claude plugin disable superpowers@claude-plugins-official        # optional
+claude plugin disable superpowers@claude-plugins-official              # optional
 ```
 
-Then add to `permissions.allow` in `~/.claude/settings.json`:
-
-```json
-"Read(~/.claude/skills/**)",
-"Read(~/.claude/plugins/**)"
-```
-
-The permission check uses the *resolved* path, so if your `~/.claude/skills/<name>` entries are symlinks (skills-manager resolves to `~/.skills-manager/`, a git clone to wherever you cloned it), add a rule for that target too. `readlink ~/.claude/skills/grilling` shows yours. The installer works this out for you.
-
-To develop the plugin itself, add the marketplace from your clone instead (`claude plugin marketplace add ./seams`). A local-directory marketplace runs the plugin from the clone, not the cache, so it also needs `"Read(//absolute/path/to/clone/plugin/**)"` (the leading `//` makes the rule absolute).
+To develop the plugin itself, add the marketplace from your clone instead (`claude plugin marketplace add ./seams`, or `MPW_REPO=/path/to/seams scripts/install.sh`). A local-directory marketplace runs the plugin from the clone, not the cache (the hook takes its root from `CLAUDE_PLUGIN_ROOT`), so a Read rule for it, if you add one, names the clone: `"Read(//absolute/path/to/seams/plugin/**)"`, the leading `//` making the rule absolute.
 
 </details>
 
@@ -222,7 +214,7 @@ The senior-engineer layer was tested the same way: `foundations` surveyed a repo
 - `plugin/` — the plugin: `.claude-plugin/plugin.json`, `hooks/` (the SessionStart bootstrap, the gate and the done-check: `seams_gate.py` plus the PreToolUse, PostToolUse, UserPromptSubmit and Stop hooks), `skills/` (bootstrap, `grill` with its design lens, `foundations`, `trivial`, the three flow skills, `release`, `incident`, the four Superpowers copies), `THIRD_PARTY_NOTICES.md`
 - `.claude-plugin/marketplace.json` — makes this repo a single-plugin marketplace
 - `scripts/install.sh` — the one-command installer; `scripts/behavior_test.py` — the routing-test harness; `scripts/tests/` — the test suites
-- `docs/plugin-behavior-tests.md` — routing-test evidence; `docs/case-study-web-downloader.md` — one feature end to end on a real repo; `docs/carousel/` — the workflow as five slides for sharing
+- `docs/plugin-behavior-tests.md` — routing-test evidence; `docs/compatibility.md` — what it was tested with; `docs/case-study-web-downloader.md` — one feature end to end on a real repo; `docs/carousel/` — the workflow as five slides for sharing
 - `tests/fixture/`, `tests/scenarios/` — the sandbox project and prompts the routing tests run in
 
 ## Tests
@@ -232,7 +224,7 @@ scripts/test.sh                       # every suite below that this machine can 
 scripts/tests/test_plugin.sh          # manifests validate, skills well-formed, Superpowers copies pinned
 scripts/tests/test_plugin_hook.sh     # the bootstrap hook against fixture homes and repos
 scripts/tests/test_hooks.sh           # the gate hooks fed JSON on stdin (PYTHON=/usr/bin/python3 for the system 3.9)
-scripts/tests/test_install.sh         # the installer's settings step, in a fixture home
+scripts/tests/test_install.sh         # the installer in fixture homes, against a stub claude CLI
 scripts/tests/test_prepare_run.sh     # the sandbox workspaces the routing tests run in
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'   # the gate module and the harness scanner
 python3 scripts/behavior_test.py run --scenario concurrency-bug --arm plugin --runs 5   # a routing test, headless
