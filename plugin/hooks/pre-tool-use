@@ -7,6 +7,7 @@ recording an allowed change in the session's ledger. Fails open (see seams_gate.
 import os
 import sys
 
+sys.dont_write_bytecode = True                 # no __pycache__ in the plugin directory
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import seams_gate as gate  # noqa: E402
 

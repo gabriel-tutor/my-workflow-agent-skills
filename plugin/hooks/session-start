@@ -19,6 +19,7 @@ import os
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True                 # no __pycache__ in the plugin directory
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 try:
     import seams_gate as gate                  # the ledger; the bootstrap must inject without it
