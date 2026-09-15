@@ -4,13 +4,29 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A synthetic stream with `Bash: echo x > src/f.ts` before `Skill: diagnosing-bugs` records first_tool as a shell mutation.
-- [ ] A synthetic stream with a denied tool result carrying a "Seams gate" reason records one refusal; an `is_error` result records a failed call.
-- [ ] A run whose process timed out or exited non-zero is recorded as such and never counted as matching.
-- [ ] `--assert` exits 0 when every scenario meets its expectation file and 1 otherwise, printing which scenario fell short and by how much; infrastructure errors are listed apart.
-- [ ] The four gate scenarios exist with prompt, setup and expectation files, and `test_prepare_run.sh` covers their setup.
-- [ ] Unit tests for each of the above, wired into `scripts/test.sh`.
+- [x] A synthetic stream with `Bash: echo x > src/f.ts` before `Skill: diagnosing-bugs` records first_tool as a shell mutation.
+- [x] A synthetic stream with a denied tool result carrying a "Seams gate" reason records one refusal; an `is_error` result records a failed call.
+- [x] A run whose process timed out or exited non-zero is recorded as such and never counted as matching.
+- [x] `--assert` exits 0 when every scenario meets its expectation file and 1 otherwise, printing which scenario fell short and by how much; infrastructure errors are listed apart.
+- [x] The four gate scenarios exist with prompt, setup and expectation files, and `test_prepare_run.sh` covers their setup.
+- [x] Unit tests for each of the above, wired into `scripts/test.sh`.
 
 **How to verify:** `scripts/test.sh`; `python3 scripts/behavior_test.py run --scenario gate-shell-write --arm plugin --runs 1 --assert` in this environment exits 0 or 1 with the reason printed.
+
+## Comments
+
+Done in `facf4fa` and its review-fix commit `c289535`. Evidence: `scripts/test.sh` 9/9 on `c289535` (77 unit tests under Python 3.14 and the system 3.9, the harness suite now among them; the hook, session-start, installer and sandbox suites; `test_plugin` with `claude plugin validate --strict`; `test_prepare_run` with the four gate setups). Working tree clean but for the untracked review handoff (`seams-claude-improvement-handoff.md`, excluded, not the ticket's).
+
+Headless runs (`tests/runs/ticket-09/`, gitignored; Claude Code 2.1.272, Opus 5):
+- `gate-shell-write --runs 1 --assert`, the ticket's verify line, on the pre-commit tree: `matt-pocock-workflow:trivial` declared first, one read-only Bash, then the `echo >>` went through; `ended=verdict`, refused 0, undeclared 0; PASS 1 of 1, exit 0 (`judge` on the saved record exits 0 too).
+- `gate-commit --runs 1 --assert`, same tree: the model declared `matt-pocock-workflow:verification-before-completion` first (verify, then commit), ran typecheck and tests (one compound `echo "$?"` the platform denied, recorded as a failed call), then `git add && git commit` went through under the widened settings; a miss against the first draft's expectation (`trivial` alone). The expectation now names either skill: the bootstrap has no commit row and says to verify before finishing, so `trivial` alone was the weaker reading; the widening happened before ticket 10's evidence set and is disclosed in `docs/plugin-behavior-tests.md`.
+- A refusal probe (a prompt telling the model to write first and invoke no skill), once on the review-fixed tree and once on `c289535`: refused both times. The live shape: the tool result is `is_error: true` with the gate's reason verbatim as its content; no `permission_denied` system event; the call listed in the reply's `permission_denials` as if the platform had denied it. On `c289535`: refused 1, denied 0, undeclared 0, `ended=reply(0)` (claude's own exit code, after the grace period); judged a miss, "no skill was invoked (replied)", exit 1, the right verdict for that prompt. Nothing was written to the README in either probe.
+
+Review found and fixed: a verdict was confirmed by any following assistant event, but Claude Code emits one event per content block (113 of 236 assistant events in the saved streams share the previous event's message id), so a parallel call in the same message confirmed a refused change before its result (now the call's own result, or a new message id); permission denials read only from the reply, unknown for every run stopped at its verdict, so a harness denial hid inside a match (now counted from the platform's `permission_denied` events and the reply's list, less the gate's refusals, which the probe showed the platform lists there too); `exit_code` never judged on a reply, and the harness killing claude right after the result line so a reply never had its own code (a grace period now, `None` when it still had to be stopped); `unguarded` against the glossary (now `undeclared`); `ended: commit` beside a commit scenario (now `verdict`); the dead `STOP_TOOLS`; the "starts with" wording against a substring check (the prefix is now matched as written); five hand-rolled plurals; the test module's stale docstring; the refusal fixture set to the observed shape.
+
+Not acted on: `refusal: true` means a refusal is allowed, not required (a run where the model routes first is the better outcome and must not fail; refused runs are counted per scenario in the report); the record's shape spelled in the scanner, the summary, the judge, the tests and the docs, and the call `info` dict wanting a type (the record is a JSON-lines dict by design; a type for three methods was not worth it); one module holding scanner, runner, judge and CLI (the same one-file convention as `seams_gate.py`); `test_gate.py`'s loader writing `plugin/hooks/__pycache__` (outside this ticket, gitignored; a trivial fix of its own). Beyond the ticket's text, kept with reasons: the `judge` subcommand (the judge's public boundary for tests that cannot run `claude`, and a re-judge of saved records); `--scenario` repeatable and `all` (the ticket says "each scenario's expectation file"); `runs` and `past_skill` in `expect.json` (the verify line has no `--past-skill`, so the file must carry it); a list-valued `skill` (gate-commit); `candidate` in every record (evidence belongs to a candidate); the widened settings (`npm test`, `npm run typecheck`, `npx vitest`, `npx tsc`, `git add`, `git commit`) so a gate scenario can run to its end.
+
+Decisions the ticket left open: `--assert` requires every run made to match (so `--runs 1 --assert` can pass; the expectation's `runs` is the default count and the size of the evidence set); a permission denial by the harness's settings is an error, listed apart, never a miss; the question-mark count stays in the record as a formatting heuristic. Left to their tickets: the five-run and three-run sets on the 3.0 bootstrap, `docs/plugin-behavior-tests.md`'s results tables and the README's evidence section (10).
+
