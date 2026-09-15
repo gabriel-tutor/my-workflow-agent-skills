@@ -36,15 +36,17 @@ To compare your install: `cd "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" && sha
 
 ## Observed on CI
 
-The first runs of `.github/workflows/test.yml`, through a throwaway pull request (closed, branch deleted): run 35006946323 on `65764f4` and run 35008326549 on `e8150fc`, 2026-09-15 18:21 and 18:34 UTC, the same results both times. The workflow runs on every push to `main` and on pull requests. Both runners use Node 22.23.2 and the `claude` CLI is absent, so `test_plugin` (manifest validation, the static checks) is skipped there and counts only from a machine with the CLI.
+`.github/workflows/test.yml` runs `scripts/test.sh` on every push to `main` and on pull requests, on `ubuntu-latest` and `macos-latest`. Both runners use Node 22 and have no `claude` CLI, so `test_plugin` (manifest validation, the static checks) is skipped there and counts only from a machine with the CLI. The README's badge shows the latest run on `main`.
+
+The 3.0.0 run: 35019368288 on `362f670`, through a throwaway pull request (#2, closed, branch deleted), 2026-09-15 20:23 UTC, green on both platforms.
 
 | Field | ubuntu-latest | macos-latest |
 | --- | --- | --- |
 | Operating system | Ubuntu 24.04.5 LTS, x64 (image `ubuntu-24.04` 20260907.300.1) | macOS 26.6.2 (25G83), arm64 (image `macos-26-arm64` 20260907.0351.1) |
 | Python | 3.12.14 (`actions/setup-python`); the system `python3` is the same 3.12, so the system-Python suites are skipped | 3.12.10 (`actions/setup-python`) and the system 3.9.6, under which the gate unit tests, the hook suite and the session-start suite ran as well |
-| Result | 4 passed, 1 failed, 2 skipped: `test_hooks` fails at "ledger should be mode 600"; `test_install`, `test_plugin_hook`, the unit tests and `test_prepare_run` pass | 8 passed, 0 failed, 1 skipped (`test_plugin`) |
+| Result | 5 passed, 0 failed, 2 skipped (the system-Python suites, `test_plugin`) | 8 passed, 0 failed, 1 skipped (`test_plugin`) |
 
-The Ubuntu failure is in the gate's hook suite (ticket 01), not in the installer: the check reads the ledger's mode with `stat -f '%Lp'` first and falls back to GNU `stat -c '%a'` only when that fails. It is recorded here as observed and left to its own fix; until it is green, Ubuntu counts as tested for the installer, the session-start hook, the harness scanner and the sandbox suite, and untested for the gate hooks.
+Earlier runs, for the record: 35006946323 on `65764f4` and 35008326549 on `e8150fc` (ticket 08, 2026-09-15 18:21 and 18:34 UTC, the same images) were green on macOS and failed on Ubuntu in the gate's hook suite at "ledger should be mode 600", a `stat` flag difference between BSD and GNU that the suite now avoids by reading the mode through the interpreter (commit `0ae7983`). Ubuntu counts as tested for everything `scripts/test.sh` runs there since 35019368288; Python 3.9 on Linux is not covered by CI (the Ubuntu runner has no distinct system interpreter) and is tested only through macOS's system 3.9.
 
 ## Not tested
 
