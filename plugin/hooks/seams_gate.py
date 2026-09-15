@@ -309,7 +309,7 @@ def is_continuation(prompt: str) -> bool:
 # One JSON file per session: the current request's declarations, changes and last
 # verification. Skill names, tool names and paths only; never command or prompt text.
 
-LEDGER_VERSION = 1
+LEDGER_VERSION = 2                            # 2: events ordered by seq, not by the clock
 
 
 def _safe_name(session_id: str) -> str:
@@ -335,12 +335,7 @@ def load_ledger(session_id: str, root: Optional[str] = None) -> dict:
         with open(ledger_path(session_id, root), encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict) and data.get("version") == LEDGER_VERSION:
-            for key in ("declarations", "changes"):
-                data.setdefault(key, [])
-            data.setdefault("verified_at", None)
-            data.setdefault("verified_seq", 0)
-            data.setdefault("seq", 0)
-            return data
+            return dict(empty_ledger(session_id), **data)
     except (OSError, ValueError):
         pass
     return empty_ledger(session_id)
@@ -367,7 +362,9 @@ def reset_ledger(session_id: str, root: Optional[str] = None) -> None:
 
 
 def _next_seq(ledger: dict) -> int:
-    """Events are ordered by this counter, not by the clock: two hooks can share a microsecond."""
+    """Events are ordered by this counter, not by the clock, so a change and a verification
+    written a microsecond apart cannot swap. (Two hooks writing the same ledger at once can
+    still drop one event: the last save wins.)"""
     ledger["seq"] = ledger.get("seq", 0) + 1
     return ledger["seq"]
 
@@ -469,6 +466,13 @@ def change_for_event(event: dict, config_dir: Optional[str] = None) -> Optional[
     return None
 
 
+def describe(change: dict) -> str:
+    """How a refusal or a block names a change: the file, or the shell label."""
+    if change.get("path"):
+        return f"`{change['path']}`"
+    return f"a shell command (`{change.get('label')}`)"
+
+
 ROUTES = ("Route it first, with the Skill tool: `diagnosing-bugs` for something broken, "
           "`matt-pocock-workflow:grill` for a change to behavior, `tdd` or "
           "`matt-pocock-workflow:implement` to keep building an agreed design, "
@@ -477,7 +481,7 @@ ROUTES = ("Route it first, with the Skill tool: `diagnosing-bugs` for something 
 
 
 def deny_reason(change: dict) -> str:
-    what = f"`{change['label']}`" if change["tool"] == "Bash" else f"editing `{change['path']}`"
+    what = describe(change) if change["tool"] == "Bash" else f"editing {describe(change)}"
     return (f"Seams gate: {what} changes the project, and this request has no declaration yet: "
             f"no process skill has been invoked for it. {ROUTES}")
 
@@ -494,19 +498,30 @@ def decide_pre_tool_use(event: dict, ledger: dict, config_dir: Optional[str] = N
 
 # --- The done-check -----------------------------------------------------------------------
 
-VERIFICATION_SKILLS = {"matt-pocock-workflow:verification-before-completion",
+VERIFICATION_SKILLS = {PLUGIN_PREFIX + "verification-before-completion",
                        "superpowers:verification-before-completion", "verification-before-completion"}
 
 
 def is_verification(skill: str) -> bool:
-    """Whether this skill running counts as verification of the changes before it."""
+    """Whether this skill running counts as verification of the changes before it.
+
+    It proves the skill ran, not that its commands were run honestly: the skill's own rules
+    make the model run them and show the output, and the transcript shows whether it did.
+    """
     return skill in VERIFICATION_SKILLS
 
 
+def _needs_verification(change: dict) -> bool:
+    """Code changes do; documentation and VCS operations (a commit after the checks) do not."""
+    if change.get("doc"):
+        return False
+    return not str(change.get("label") or "").startswith("git ")
+
+
 def unverified_changes(ledger: dict) -> list:
-    """Non-documentation project changes recorded after the last verification."""
+    """Changes that need verification, recorded after the last verification."""
     since = ledger.get("verified_seq") or 0
-    return [c for c in ledger.get("changes", []) if not c.get("doc") and c.get("seq", 0) > since]
+    return [c for c in ledger.get("changes", []) if _needs_verification(c) and c.get("seq", 0) > since]
 
 
 def decide_stop(ledger: dict, stop_hook_active: bool) -> Optional[str]:
@@ -516,14 +531,11 @@ def decide_stop(ledger: dict, stop_hook_active: bool) -> Optional[str]:
     pending = unverified_changes(ledger)
     if not pending:
         return None
-    first = pending[0]
-    example = f"`{first['path']}`" if first.get("path") else f"a shell command (`{first.get('label')}`)"
-    files = len({c.get("path") or c.get("label") for c in pending})
-    noun = "project file" if files == 1 else "project files"
-    return (f"Seams done-check: this turn changed {files} {noun} (for example {example}) and "
-            f"`matt-pocock-workflow:verification-before-completion` has not run since. Run it now "
-            f"with the Skill tool, show the verify commands' real output, then finish. This check "
-            f"does not repeat in this turn.")
+    noun = "unverified change" if len(pending) == 1 else "unverified changes"
+    return (f"Seams done-check: {len(pending)} {noun} to the project since the last verification "
+            f"(for example {describe(pending[0])}). Run `{PLUGIN_PREFIX}verification-before-completion` "
+            f"now with the Skill tool, show the verify commands' real output, then finish. This "
+            f"check does not repeat in this turn.")
 
 
 # --- The hook frame -----------------------------------------------------------------------

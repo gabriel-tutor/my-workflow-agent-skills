@@ -18,11 +18,10 @@ pre_bash()   { ev PreToolUse "\"tool_name\":\"Bash\",\"tool_input\":{\"command\"
 post_skill() { ev PostToolUse "\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"$1\"},\"tool_response\":{}" | hook post-tool-use; }
 prompt()     { ev UserPromptSubmit "\"prompt\":\"$1\"" | hook user-prompt-submit; }
 start()      { ev SessionStart "\"source\":\"$1\"" | hook session-start >/dev/null; }
-denied() { grep -q '"permissionDecision": *"deny"' <<< "$1"; }
-LEDGER="$TMPDIR/seams/s1.json"
-
 stop()       { ev Stop "\"stop_hook_active\":$1,\"last_assistant_message\":\"done\"" | hook stop; }
-blocked()    { grep -q '"decision": *"block"' <<< "$1"; }
+denied()  { grep -q '"permissionDecision": *"deny"' <<< "$1"; }
+blocked() { grep -q '"decision": *"block"' <<< "$1"; }
+LEDGER="$TMPDIR/seams/s1.json"
 
 for h in pre-tool-use post-tool-use user-prompt-submit session-start stop; do
   [[ -x "$HOOKS/$h" ]] || fail "hook missing or not executable: $h"
@@ -109,6 +108,8 @@ OUT=$(stop false); blocked "$OUT" || fail "an unverified shell mutation should b
 grep -q 'sed -i' <<< "$OUT" || fail "block reason should name the shell label"
 post_skill "superpowers:verification-before-completion"
 OUT=$(stop false); [[ -z "$OUT" ]] || fail "Superpowers' verification copy should count: $OUT"
+pre_bash "git commit -m x" >/dev/null
+OUT=$(stop false); [[ -z "$OUT" ]] || fail "a commit after verification should not re-block: $OUT"
 
 # 11. Garbage in: every hook exits 0 with no stdout.
 for h in pre-tool-use post-tool-use user-prompt-submit session-start stop; do

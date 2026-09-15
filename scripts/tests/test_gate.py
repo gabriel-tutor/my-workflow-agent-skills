@@ -395,7 +395,7 @@ class StopDecision(unittest.TestCase):
         reason = gate.decide_stop(self.ledger, stop_hook_active=False)
         self.assertIsNotNone(reason)
         self.assertIn("Seams done-check", reason)
-        self.assertIn("1 project file", reason)
+        self.assertIn("1 unverified change", reason)
         self.assertIn("/proj/src/a.ts", reason)
         self.assertIn("matt-pocock-workflow:verification-before-completion", reason)
         self.assertIn("does not repeat", reason)
@@ -428,7 +428,29 @@ class StopDecision(unittest.TestCase):
     def test_the_count_covers_every_unverified_file(self):
         for path in ("/proj/src/a.ts", "/proj/src/b.ts", "/proj/src/c.ts"):
             gate.add_change(self.ledger, {"tool": "Edit", "path": path, "doc": False})
-        self.assertIn("3 project files", gate.decide_stop(self.ledger, stop_hook_active=False))
+        self.assertIn("3 unverified changes", gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_a_commit_after_verification_does_not_need_verifying_again(self):
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/a.ts", "doc": False})
+        gate.mark_verified(self.ledger)
+        gate.add_change(self.ledger, {"tool": "Bash", "label": "git commit", "doc": False})
+        gate.add_change(self.ledger, {"tool": "Bash", "label": "git push", "doc": False})
+        self.assertIsNone(gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_the_reason_speaks_of_the_request_not_the_turn(self):
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/a.ts", "doc": False})
+        reason = gate.decide_stop(self.ledger, stop_hook_active=False)
+        self.assertNotIn("this turn changed", reason)
+        self.assertIn("since the last verification", reason)
+
+    def test_a_ledger_from_an_older_format_reads_as_empty(self):
+        root = tempfile.mkdtemp()
+        path = gate.ledger_path("s1", root)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        Path(path).write_text('{"version": 1, "session": "s1", "declarations": [{"skill": "tdd"}], '
+                              '"changes": [{"tool": "Edit", "path": "/p/a.ts", "doc": false}], "verified_at": null}')
+        self.assertEqual(gate.load_ledger("s1", root)["declarations"], [])
+        self.assertEqual(gate.LEDGER_VERSION, 2)
 
     def test_which_skills_count_as_verification(self):
         for skill in ["matt-pocock-workflow:verification-before-completion",
