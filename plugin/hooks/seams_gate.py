@@ -325,8 +325,8 @@ def ledger_path(session_id: str, root: Optional[str] = None) -> str:
 
 
 def empty_ledger(session_id: str) -> dict:
-    return {"version": LEDGER_VERSION, "session": session_id, "started": time.time(),
-            "declarations": [], "changes": [], "verified_at": None}
+    return {"version": LEDGER_VERSION, "session": session_id, "started": time.time(), "seq": 0,
+            "declarations": [], "changes": [], "verified_at": None, "verified_seq": 0}
 
 
 def load_ledger(session_id: str, root: Optional[str] = None) -> dict:
@@ -338,6 +338,8 @@ def load_ledger(session_id: str, root: Optional[str] = None) -> dict:
             for key in ("declarations", "changes"):
                 data.setdefault(key, [])
             data.setdefault("verified_at", None)
+            data.setdefault("verified_seq", 0)
+            data.setdefault("seq", 0)
             return data
     except (OSError, ValueError):
         pass
@@ -364,24 +366,33 @@ def reset_ledger(session_id: str, root: Optional[str] = None) -> None:
         pass
 
 
+def _next_seq(ledger: dict) -> int:
+    """Events are ordered by this counter, not by the clock: two hooks can share a microsecond."""
+    ledger["seq"] = ledger.get("seq", 0) + 1
+    return ledger["seq"]
+
+
 def new_request(ledger: dict) -> dict:
     ledger["started"] = time.time()
     ledger["declarations"] = []
     ledger["changes"] = []
     ledger["verified_at"] = None
+    ledger["verified_seq"] = 0
     return ledger
 
 
 def add_declaration(ledger: dict, skill: str, agent_id: Optional[str] = None) -> None:
-    ledger["declarations"].append({"skill": skill, "at": time.time(), "agent": agent_id})
+    ledger["declarations"].append({"skill": skill, "at": time.time(), "seq": _next_seq(ledger),
+                                   "agent": agent_id})
 
 
 def add_change(ledger: dict, change: dict) -> None:
-    ledger["changes"].append(dict(change, at=time.time()))
+    ledger["changes"].append(dict(change, at=time.time(), seq=_next_seq(ledger)))
 
 
 def mark_verified(ledger: dict) -> None:
     ledger["verified_at"] = time.time()
+    ledger["verified_seq"] = _next_seq(ledger)
 
 
 def cleanup_ledgers(root: Optional[str] = None, days: int = 7) -> None:
@@ -418,11 +429,17 @@ def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
-def is_exempt_path(path: str, config: Optional[str] = None) -> bool:
-    """Temp directories and the Claude config directory are not the project."""
+def is_exempt_path(path: str, config: Optional[str] = None, cwd: Optional[str] = None) -> bool:
+    """Temp directories and the Claude config directory are not the project.
+
+    A path under the session's working directory is the project wherever that directory
+    lives, so a repo checked out under the temp dir is still gated.
+    """
     real = os.path.realpath(path)
     if real == "/dev/null":
         return True
+    if cwd and _under(real, cwd):
+        return False
     roots = (tempfile.gettempdir(), config_dir(config)) + TEMP_ROOTS
     return any(_under(real, root) for root in roots)
 
@@ -442,7 +459,7 @@ def change_for_event(event: dict, config_dir: Optional[str] = None) -> Optional[
         if not os.path.isabs(path):
             path = os.path.join(event.get("cwd") or os.getcwd(), path)
         path = os.path.normpath(path)
-        if is_exempt_path(path, config_dir):
+        if is_exempt_path(path, config_dir, event.get("cwd")):
             return None
         return {"tool": tool, "path": path, "doc": path.lower().endswith(DOC_SUFFIXES)}
     if tool == "Bash":
@@ -473,6 +490,40 @@ def decide_pre_tool_use(event: dict, ledger: dict, config_dir: Optional[str] = N
     if not ledger.get("declarations"):
         return {"decision": "deny", "reason": deny_reason(change), "change": None}
     return {"decision": "allow", "reason": None, "change": change}
+
+
+# --- The done-check -----------------------------------------------------------------------
+
+VERIFICATION_SKILLS = {"matt-pocock-workflow:verification-before-completion",
+                       "superpowers:verification-before-completion", "verification-before-completion"}
+
+
+def is_verification(skill: str) -> bool:
+    """Whether this skill running counts as verification of the changes before it."""
+    return skill in VERIFICATION_SKILLS
+
+
+def unverified_changes(ledger: dict) -> list:
+    """Non-documentation project changes recorded after the last verification."""
+    since = ledger.get("verified_seq") or 0
+    return [c for c in ledger.get("changes", []) if not c.get("doc") and c.get("seq", 0) > since]
+
+
+def decide_stop(ledger: dict, stop_hook_active: bool) -> Optional[str]:
+    """The reason to block this stop, or None. Blocks at most once per turn."""
+    if stop_hook_active:
+        return None
+    pending = unverified_changes(ledger)
+    if not pending:
+        return None
+    first = pending[0]
+    example = f"`{first['path']}`" if first.get("path") else f"a shell command (`{first.get('label')}`)"
+    files = len({c.get("path") or c.get("label") for c in pending})
+    noun = "project file" if files == 1 else "project files"
+    return (f"Seams done-check: this turn changed {files} {noun} (for example {example}) and "
+            f"`matt-pocock-workflow:verification-before-completion` has not run since. Run it now "
+            f"with the Skill tool, show the verify commands' real output, then finish. This check "
+            f"does not repeat in this turn.")
 
 
 # --- The hook frame -----------------------------------------------------------------------

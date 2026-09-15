@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Stop hook, the done-check: a turn that changed code ends only after verification ran.
+
+Blocks once, with a reason, when the request has a non-documentation project change after
+its last verification and Claude Code says this is the first stop of the turn
+(stop_hook_active false). Prints nothing otherwise. Fails open (see seams_gate.run_hook).
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import seams_gate as gate  # noqa: E402
+
+
+def handle(event: dict):
+    ledger = gate.load_ledger(event.get("session_id") or "")
+    reason = gate.decide_stop(ledger, bool(event.get("stop_hook_active")))
+    if reason:
+        return {"decision": "block", "reason": reason}
+    return None
+
+
+if __name__ == "__main__":
+    sys.exit(gate.run_hook(handle))

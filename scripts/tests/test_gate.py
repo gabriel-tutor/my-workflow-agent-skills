@@ -317,6 +317,14 @@ class ProjectChanges(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(self.change(event("Write", file_path=path, content="x")))
 
+    def test_a_project_that_lives_in_the_temp_dir_is_still_the_project(self):
+        cwd = os.path.join(tempfile.gettempdir(), "runs", "workspace")
+        change = self.change(event("Edit", cwd=cwd, file_path=os.path.join(cwd, "src", "a.ts")))
+        self.assertIsNotNone(change)
+        self.assertEqual(change["path"], os.path.join(cwd, "src", "a.ts"))
+        scratch = self.change(event("Write", cwd=cwd, file_path=os.path.join(tempfile.gettempdir(), "notes.txt"), content="x"))
+        self.assertIsNone(scratch)
+
     def test_a_worktree_outside_the_cwd_is_still_the_project(self):
         change = self.change(event("Edit", cwd="/proj", file_path="/proj.worktrees/feature/src/a.ts"))
         self.assertIsNotNone(change)
@@ -373,6 +381,63 @@ class PreToolUseDecision(unittest.TestCase):
         self.assertEqual(self.decide(event("Edit", agent_id="a1", file_path="/proj/src/a.ts"))["decision"], "deny")
         gate.add_declaration(self.ledger, "matt-pocock-workflow:implement")
         self.assertEqual(self.decide(event("Edit", agent_id="a1", file_path="/proj/src/a.ts"))["decision"], "allow")
+
+
+class StopDecision(unittest.TestCase):
+    """decide_stop: a turn that changed non-documentation project files ends only after verification."""
+
+    def setUp(self):
+        self.ledger = gate.empty_ledger("s1")
+        gate.add_declaration(self.ledger, "tdd")
+
+    def test_an_unverified_code_change_blocks_once_with_the_reason(self):
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/a.ts", "doc": False})
+        reason = gate.decide_stop(self.ledger, stop_hook_active=False)
+        self.assertIsNotNone(reason)
+        self.assertIn("Seams done-check", reason)
+        self.assertIn("1 project file", reason)
+        self.assertIn("/proj/src/a.ts", reason)
+        self.assertIn("matt-pocock-workflow:verification-before-completion", reason)
+        self.assertIn("does not repeat", reason)
+
+    def test_the_second_stop_of_the_turn_is_allowed(self):
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/a.ts", "doc": False})
+        self.assertIsNone(gate.decide_stop(self.ledger, stop_hook_active=True))
+
+    def test_no_changes_or_documentation_only_are_allowed(self):
+        self.assertIsNone(gate.decide_stop(self.ledger, stop_hook_active=False))
+        gate.add_change(self.ledger, {"tool": "Write", "path": "/proj/docs/spec.md", "doc": True})
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/CONTEXT.md", "doc": True})
+        self.assertIsNone(gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_verification_after_the_last_change_satisfies_it(self):
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/a.ts", "doc": False})
+        gate.mark_verified(self.ledger)
+        self.assertIsNone(gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_a_change_after_verification_needs_verifying_again(self):
+        gate.mark_verified(self.ledger)
+        gate.add_change(self.ledger, {"tool": "Edit", "path": "/proj/src/b.ts", "doc": False})
+        self.assertIn("/proj/src/b.ts", gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_a_shell_mutation_counts_and_is_named_by_its_label(self):
+        gate.add_change(self.ledger, {"tool": "Bash", "label": "sed -i", "doc": False})
+        reason = gate.decide_stop(self.ledger, stop_hook_active=False)
+        self.assertIn("sed -i", reason)
+
+    def test_the_count_covers_every_unverified_file(self):
+        for path in ("/proj/src/a.ts", "/proj/src/b.ts", "/proj/src/c.ts"):
+            gate.add_change(self.ledger, {"tool": "Edit", "path": path, "doc": False})
+        self.assertIn("3 project files", gate.decide_stop(self.ledger, stop_hook_active=False))
+
+    def test_which_skills_count_as_verification(self):
+        for skill in ["matt-pocock-workflow:verification-before-completion",
+                      "superpowers:verification-before-completion", "verification-before-completion"]:
+            with self.subTest(skill=skill):
+                self.assertTrue(gate.is_verification(skill))
+        for skill in ["tdd", "matt-pocock-workflow:trivial", "superpowers:brainstorming"]:
+            with self.subTest(skill=skill):
+                self.assertFalse(gate.is_verification(skill))
 
 
 if __name__ == "__main__":

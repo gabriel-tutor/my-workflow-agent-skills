@@ -21,7 +21,10 @@ start()      { ev SessionStart "\"source\":\"$1\"" | hook session-start >/dev/nu
 denied() { grep -q '"permissionDecision": *"deny"' <<< "$1"; }
 LEDGER="$TMPDIR/seams/s1.json"
 
-for h in pre-tool-use post-tool-use user-prompt-submit session-start; do
+stop()       { ev Stop "\"stop_hook_active\":$1,\"last_assistant_message\":\"done\"" | hook stop; }
+blocked()    { grep -q '"decision": *"block"' <<< "$1"; }
+
+for h in pre-tool-use post-tool-use user-prompt-submit session-start stop; do
   [[ -x "$HOOKS/$h" ]] || fail "hook missing or not executable: $h"
 done
 
@@ -88,13 +91,32 @@ start compact
 [[ ! -e "$OLD" ]] || fail "an eight-day-old ledger should be removed"
 [[ -e "$LEDGER" ]] || fail "the live ledger should be kept"
 
-# 10. Garbage in: every hook exits 0 with no stdout.
-for h in pre-tool-use post-tool-use user-prompt-submit session-start; do
+# 10. The done-check: a turn that changed code cannot end until verification ran; once per turn.
+prompt "change the label"; post_skill "tdd"
+OUT=$(stop false); [[ -z "$OUT" ]] || fail "stop with no changes should pass: $OUT"
+pre_edit "$PROJ/src/a.ts" >/dev/null
+OUT=$(stop false); blocked "$OUT" || fail "stop after an unverified code change should block: $OUT"
+grep -q 'Seams done-check' <<< "$OUT" || fail "block reason should say Seams done-check"
+grep -q "$PROJ/src/a.ts" <<< "$OUT" || fail "block reason should name the file"
+grep -q 'verification-before-completion' <<< "$OUT" || fail "block reason should name the verification skill"
+OUT=$(stop true); [[ -z "$OUT" ]] || fail "the second stop of the turn should pass: $OUT"
+post_skill "matt-pocock-workflow:verification-before-completion"
+OUT=$(stop false); [[ -z "$OUT" ]] || fail "stop after verification should pass: $OUT"
+pre_edit "$PROJ/README.md" >/dev/null
+OUT=$(stop false); [[ -z "$OUT" ]] || fail "a documentation-only change should not block: $OUT"
+pre_bash "sed -i s/a/b/ src/a.ts" >/dev/null
+OUT=$(stop false); blocked "$OUT" || fail "an unverified shell mutation should block: $OUT"
+grep -q 'sed -i' <<< "$OUT" || fail "block reason should name the shell label"
+post_skill "superpowers:verification-before-completion"
+OUT=$(stop false); [[ -z "$OUT" ]] || fail "Superpowers' verification copy should count: $OUT"
+
+# 11. Garbage in: every hook exits 0 with no stdout.
+for h in pre-tool-use post-tool-use user-prompt-submit session-start stop; do
   OUT=$(echo '{not json' | hook "$h" 2>/dev/null) || fail "$h should exit 0 on garbage"
   [[ -z "$OUT" ]] || fail "$h should print nothing on garbage: $OUT"
 done
 
-# 11. The ledger is private to the user.
+# 12. The ledger is private to the user.
 [[ "$(stat -f '%Lp' "$LEDGER" 2>/dev/null || stat -c '%a' "$LEDGER")" == "600" ]] || fail "ledger should be mode 600"
 
 echo "test_hooks ($($PY --version 2>&1)): OK"
