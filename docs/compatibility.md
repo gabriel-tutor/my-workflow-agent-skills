@@ -36,7 +36,7 @@ To compare your install: `cd "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" && sha
 
 ## Observed on CI
 
-The first run of `.github/workflows/test.yml`, on candidate `65764f4` through a throwaway pull request (run 35006946323, 2026-09-15 18:21 UTC; the workflow runs on every push to `main` and on pull requests). Both runners use Node 22.23.2 and the `claude` CLI is absent, so `test_plugin` (manifest validation, the static checks) is skipped there and counts only from a machine with the CLI.
+The first runs of `.github/workflows/test.yml`, through a throwaway pull request (closed, branch deleted): run 35006946323 on `65764f4` and run 35008326549 on `e8150fc`, 2026-09-15 18:21 and 18:34 UTC, the same results both times. The workflow runs on every push to `main` and on pull requests. Both runners use Node 22.23.2 and the `claude` CLI is absent, so `test_plugin` (manifest validation, the static checks) is skipped there and counts only from a machine with the CLI.
 
 | Field | ubuntu-latest | macos-latest |
 | --- | --- | --- |
