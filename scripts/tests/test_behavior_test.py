@@ -1,10 +1,15 @@
-"""The behavior-test harness's stream scanner, driven through `behavior_test.py scan <stream>`.
+"""The behavior-test harness: its stream scanner through `behavior_test.py scan <stream>`, its
+judge through `behavior_test.py judge <results.jsonl>` against the real expectation files
+under tests/scenarios, and a run's record through `run_once` with a stub `claude` on PATH.
 
 A run's verdict is its first committing call: a Skill or AskUserQuestion call (a process
-choice) or an Edit/Write (straight to code). The scanner records that call, the exploring
-tool calls before it, the assistant text before it, and, when no such call happens, the
-final result. With --past-skill, Skill calls are recorded but do not stop the scan, so a
-test can see what the skill then does (for instance, the grill's first question).
+choice), or a change to the workspace (an Edit/Write there, or a shell command the gate's
+classifier labels a mutation), confirmed by its result: a call the gate refused or a change
+that failed changed nothing, so it is counted and the scan goes on. The scanner records that
+call, the exploring calls before it, the assistant text before it, and, when no such call
+happens, the final result. With --past-skill, Skill calls are recorded but do not stop the
+scan, so a test can see what the skill then does (the grill's first question, or whether a
+gate scenario's change goes through once the route is declared).
 """
 from __future__ import annotations
 
@@ -32,8 +37,20 @@ def load_harness():
 INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5"}
 
 
-def assistant(*blocks: dict) -> dict:
-    return {"type": "assistant", "message": {"role": "assistant", "content": list(blocks)}}
+_messages = iter(range(1, 10**6))
+
+
+def assistant(*blocks: dict, mid: str | None = None) -> dict:
+    """One assistant event. Claude Code emits one event per content block, all sharing the
+    message's id; pass `mid` to put two events in one message, else each call is a new one."""
+    return {"type": "assistant", "message": {"id": mid or f"msg_{next(_messages)}", "role": "assistant",
+                                             "content": list(blocks)}}
+
+
+def denied(tool_use_id: str, message: str = "This command requires approval") -> dict:
+    """The system event Claude Code emits when its permission system denies a call."""
+    return {"type": "system", "subtype": "permission_denied", "tool_name": "Bash", "tool_use_id": tool_use_id,
+            "decision_reason_type": "other", "message": message}
 
 
 def tool(name: str, **inputs: object) -> dict:
@@ -46,8 +63,12 @@ def tool_result(tool_use_id: str, content: str, error: bool = False) -> dict:
         {"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": error}]}}
 
 
-REFUSED = ("PreToolUse hook denied: Seams gate: a shell command (`a redirect to a file`) changes the "
-           "project, and this request has no declaration yet: no process skill has been invoked for it.")
+# A refused call's result as Claude Code 2.1.272 reports it (observed 2026-09-16, ticket 09's probe
+# run): the gate's reason verbatim as the content, is_error true, and the call listed in the reply's
+# permission_denials.
+REFUSED = ("Seams gate: a shell command (`a redirect to a file`) changes the project, and this request "
+           "has no declaration yet: no process skill has been invoked for it. Route it first, with the "
+           "Skill tool: `diagnosing-bugs` for something broken, ... Then retry this call.")
 
 
 def text(value: str) -> dict:
@@ -176,7 +197,34 @@ class ToolResultTest(unittest.TestCase):
         self.assertEqual(r["refusals"], 1)
         self.assertEqual((r["first_tool"], r["skill"]), ("Skill", "matt-pocock-workflow:trivial"))
         self.assertEqual(r["before"], ["Bash(refused)"])
-        self.assertEqual((r["failed_calls"], r["unguarded"]), (0, 0))
+        self.assertEqual((r["failed_calls"], r["undeclared"]), (0, 0))
+
+    def test_a_second_call_in_the_same_message_does_not_confirm_the_first(self):
+        # Claude Code splits one message's blocks into events sharing the message id; the
+        # verdict waits for its result, which a parallel call's event does not stand in for.
+        r = scan(INIT,
+                 assistant(tool("Edit", id="t1", file_path="src/f.ts", old_string="x", new_string="y"), mid="m1"),
+                 assistant(tool("Bash", id="t2", command="cat src/f.ts"), mid="m1"),
+                 tool_result("t1", "PreToolUse hook denied: Seams gate: editing `src/f.ts` changes the project", error=True),
+                 tool_result("t2", "x"),
+                 assistant(tool("Skill", id="t3", skill="matt-pocock-workflow:trivial")),
+                 tool_result("t3", "Launching skill: matt-pocock-workflow:trivial"))
+        self.assertEqual((r["refusals"], r["undeclared"]), (1, 0))
+        self.assertEqual((r["first_tool"], r["skill"]), ("Skill", "matt-pocock-workflow:trivial"))
+        self.assertEqual(r["before"], ["Bash", "Edit(refused)"])
+
+    def test_a_denial_before_the_verdict_is_counted_live_and_a_refusal_is_not_one(self):
+        r = scan(INIT,
+                 assistant(tool("Bash", id="t1", command="ls -la && git remote -v")),
+                 denied("t1"),
+                 tool_result("t1", "This command requires approval", error=True),
+                 assistant(tool("Bash", id="t2", command="echo x >> README.md")),
+                 denied("t2", "Seams gate: a shell command (`a redirect to a file`) changes the project"),
+                 tool_result("t2", REFUSED, error=True),
+                 assistant(tool("Skill", id="t3", skill="matt-pocock-workflow:trivial")),
+                 tool_result("t3", "Launching skill: matt-pocock-workflow:trivial"))
+        self.assertEqual((r["denials"], r["refusals"], r["failed_calls"]), (1, 1, 1))
+        self.assertEqual((r["first_tool"], r["skill"]), ("Skill", "matt-pocock-workflow:trivial"))
 
     def test_an_error_result_is_a_failed_call_and_a_failed_change_is_not_the_commit(self):
         r = scan(INIT,
@@ -189,11 +237,11 @@ class ToolResultTest(unittest.TestCase):
         self.assertEqual((r["failed_calls"], r["refusals"]), (2, 0))
         self.assertEqual((r["first_tool"], r["skill"], r["before"]), ("Skill", "tdd", ["Bash", "Edit(failed)"]))
 
-    def test_a_change_that_goes_through_before_any_declaration_is_unguarded(self):
+    def test_a_change_that_goes_through_before_any_declaration_is_undeclared(self):
         r = scan(INIT,
                  assistant(tool("Edit", id="t1", file_path="src/pricing.ts", old_string="x", new_string="y")),
                  tool_result("t1", "The file src/pricing.ts has been updated successfully."))
-        self.assertEqual((r["first_tool"], r["unguarded"], r["ended"]), ("Edit", 1, "commit"))
+        self.assertEqual((r["first_tool"], r["undeclared"], r["ended"]), ("Edit", 1, "verdict"))
 
     def test_a_change_after_a_declaration_is_guarded(self):
         r = scan(INIT,
@@ -202,7 +250,7 @@ class ToolResultTest(unittest.TestCase):
                  assistant(tool("Edit", id="t2", file_path="src/format.ts", old_string="x", new_string="y")),
                  tool_result("t2", "The file src/format.ts has been updated successfully."),
                  past_skill=True)
-        self.assertEqual((r["first_tool"], r["skill"], r["unguarded"]), ("Edit", "matt-pocock-workflow:trivial", 0))
+        self.assertEqual((r["first_tool"], r["skill"], r["undeclared"]), ("Edit", "matt-pocock-workflow:trivial", 0))
 
     def test_a_failed_skill_invocation_is_recorded_as_such(self):
         failed = scan(INIT,
@@ -224,7 +272,7 @@ class ToolResultTest(unittest.TestCase):
                   "permission_denials": [{"tool_name": "Bash", "tool_use_id": "t9"}]})
         self.assertEqual((r["denials"], r["result_subtype"], r["result_error"], r["output_tokens"], r["ended"]),
                          (1, "success", False, 42, "reply"))
-        self.assertIsNone(scan(INIT, assistant(tool("Skill", skill="tdd")))["denials"])
+        self.assertEqual(scan(INIT, assistant(tool("Skill", skill="tdd")))["denials"], 0)
 
 
 class RunRecordTest(unittest.TestCase):
@@ -246,7 +294,7 @@ class RunRecordTest(unittest.TestCase):
             os.environ["PATH"] = f"{stub.parent}:{saved}"
             try:
                 return harness.run_once("cosmetic-edit", "plugin", "fix it", root / "run", timeout,
-                                        past_skill=False, superpowers=False,
+                                        past_skill=False, superpowers=False, grace=0.5,
                                         prepare=lambda scenario, run_dir: (run_dir / "workspace").mkdir(parents=True))
             finally:
                 os.environ["PATH"] = saved
@@ -269,17 +317,23 @@ class RunRecordTest(unittest.TestCase):
                                                 "permission_denials": []}))
         self.assertEqual((r["ended"], r["exit_code"], r["denials"]), ("reply", 0, 0))
 
-    def test_a_run_stopped_at_its_verdict_is_a_commit_whatever_the_kill_code(self):
+    def test_a_process_that_hangs_after_its_reply_is_stopped_without_an_exit_code(self):
+        reply = {"type": "result", "subtype": "success", "result": "ok", "is_error": False,
+                 "usage": {"output_tokens": 5}, "permission_denials": []}
+        r = self.run_with_stub(self.emit(INIT, reply) + "sleep 30\n")
+        self.assertEqual((r["ended"], r["exit_code"]), ("reply", None))
+
+    def test_a_run_stopped_at_its_verdict_says_so_whatever_the_kill_code(self):
         r = self.run_with_stub(self.emit(*self.SKILL_STREAM) + "sleep 30\n")
-        self.assertEqual((r["ended"], r["first_tool"], r["skill"]), ("commit", "Skill", "diagnosing-bugs"))
+        self.assertEqual((r["ended"], r["first_tool"], r["skill"]), ("verdict", "Skill", "diagnosing-bugs"))
         self.assertNotEqual(r["exit_code"], 0)
 
 
 def record(scenario: str, run: int, **fields: object) -> dict:
     """A run record as results.jsonl holds it: a clean routing verdict unless overridden."""
     base = {"scenario": scenario, "arm": "plugin", "run": run, "first_tool": "Skill", "skill": None,
-            "skill_failed": False, "refusals": 0, "late_refusals": 0, "failed_calls": 0, "denials": None,
-            "unguarded": 0, "ended": "commit", "exit_code": -15, "timed_out": False, "result": None,
+            "skill_failed": False, "refusals": 0, "late_refusals": 0, "failed_calls": 0, "denials": 0,
+            "undeclared": 0, "ended": "verdict", "exit_code": -15, "timed_out": False, "result": None,
             "result_subtype": None, "result_error": None, "output_tokens": None}
     return {**base, **fields}
 
@@ -321,19 +375,22 @@ class JudgeTest(unittest.TestCase):
                                     result_subtype="success", result_error=False, output_tokens=0,
                                     result="You have hit your session limit."),
                              record("cosmetic-edit", 4, skill=self.TRIVIAL, ended="reply", exit_code=0,
-                                    result_subtype="success", result_error=False, output_tokens=90, denials=2))
+                                    result_subtype="success", result_error=False, output_tokens=90, denials=2),
+                             record("cosmetic-edit", 5, skill=self.TRIVIAL, ended="reply", exit_code=2,
+                                    result_subtype="success", result_error=False, output_tokens=90))
         self.assertEqual(code, 1)
-        self.assertIn("0 of 4", report)
+        self.assertIn("0 of 5", report)
+        self.assertRegex(report, r"error\s+run 5: .*exited with code 2 after its reply")
         self.assertRegex(report, r"error\s+run 1: timed out")
         self.assertRegex(report, r"error\s+run 2: .*exit.*1")
         self.assertRegex(report, r"error\s+run 3: .*no tokens.*session limit")
         self.assertRegex(report, r"error\s+run 4: .*2 permission denials")
         self.assertNotIn("miss ", report)
 
-    def test_a_failed_skill_call_and_an_unguarded_change_are_misses(self):
+    def test_a_failed_skill_call_and_an_undeclared_change_are_misses(self):
         code, report = judge(record("cosmetic-edit", 1, skill=self.TRIVIAL, skill_failed=True),
-                             record("cosmetic-edit", 2, skill=self.TRIVIAL, unguarded=1, first_tool="Edit"),
-                             record("cosmetic-edit", 3, skill=None, first_tool="Edit", unguarded=1))
+                             record("cosmetic-edit", 2, skill=self.TRIVIAL, undeclared=1, first_tool="Edit"),
+                             record("cosmetic-edit", 3, skill=None, first_tool="Edit", undeclared=1))
         self.assertEqual(code, 1)
         self.assertRegex(report, r"miss\s+run 1: .*skill call failed")
         self.assertRegex(report, r"miss\s+run 2: .*1 change went through before any declaration")
